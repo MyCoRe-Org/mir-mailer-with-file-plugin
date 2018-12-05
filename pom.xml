@@ -53,13 +53,11 @@
     <dependency>
       <groupId>javax.servlet</groupId>
       <artifactId>javax.servlet-api</artifactId>
-      <version>3.1.0</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.mycore</groupId>
       <artifactId>mycore-base</artifactId>
-      <version>2018.06.0.2-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -89,6 +87,7 @@
               <!-- Use the artifact id as MCR-Artifact-Id. -->
               <MCR-Artifact-Id>${project.artifactId}</MCR-Artifact-Id>
               <MCR-Application-Module>${project.name}</MCR-Application-Module>
+              <MCR-Auto-Deploy>true</MCR-Auto-Deploy>
             </manifestEntries>
           </archive>
         </configuration>

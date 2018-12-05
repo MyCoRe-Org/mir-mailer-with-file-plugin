@@ -38,7 +38,7 @@ import org.mycore.common.config.MCRConfiguration;
 import org.mycore.frontend.servlets.MCRServlet;
 @MultipartConfig
 
-/**
+/*
  * Servlet implementation class MIRMailerWithFileServlet
  */
 public class MIRMailerWithFileServlet extends MCRServlet {
