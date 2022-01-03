@@ -34,7 +34,7 @@ import javax.servlet.http.Part;
 
 import org.apache.log4j.Logger;
 import org.mycore.common.MCRMailer;
-import org.mycore.common.config.MCRConfiguration;
+import org.mycore.common.config.MCRConfiguration2;
 import org.mycore.frontend.servlets.MCRServlet;
 @MultipartConfig
 
@@ -44,19 +44,18 @@ import org.mycore.frontend.servlets.MCRServlet;
 public class MIRMailerWithFileServlet extends MCRServlet {
     private static final long serialVersionUID = 1L;
     private static final Logger LOGGER = Logger.getLogger(MIRMailerWithFileServlet.class);
+    public static final String MCR_MODULE_EDITOR_MAIL = "MCR.mir-module.EditorMail";
 
     /**
      * @see MCRServlet#doPost(HttpServletRequest request, HttpServletResponse response)
      */
     public void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        MCRConfiguration config = MCRConfiguration.instance();
-
-        String ReqCharEncoding = config.getString("MCR.Request.CharEncoding", "UTF-8");
+        String ReqCharEncoding = MCRConfiguration2.getString("MCR.Request.CharEncoding").orElse("UTF-8");
         request.setCharacterEncoding(ReqCharEncoding);
 
         String sender    = request.getParameter("name") + "<" + request.getParameter("mail") + ">"; // Retrieves <input type="text" name="name"> and <input type="text" name="mail">
         List<String> recipients = new ArrayList<String>();
-        recipients.add(config.getString("MCR.mir-module.EditorMail"));
+        recipients.add(MCRConfiguration2.getStringOrThrow(MCR_MODULE_EDITOR_MAIL));
         if (request.getParameterMap().containsKey("copy")) {
             recipients.add(request.getParameter("mail"));
         }
@@ -91,7 +90,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         if (filePart.getSize() != 0) {
             String fileName = Paths.get(filePart.getSubmittedFileName()).getFileName().toString(); // MSIE fix.
 
-            File uploads = new File(config.getString("MIR.UploadForm.path"));
+            File uploads = new File(MCRConfiguration2.getStringOrThrow("MIR.UploadForm.path"));
             File file = new File(uploads, fileName);
 
             try {
