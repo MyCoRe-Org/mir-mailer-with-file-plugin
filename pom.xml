@@ -22,11 +22,11 @@
   <parent>
     <groupId>org.mycore.mir</groupId>
     <artifactId>mir-parent</artifactId>
-    <version>2021.06.1-SNAPSHOT</version>
+    <version>2022.06.3-SNAPSHOT</version>
   </parent>
 
   <artifactId>mir-mailer-with-file-plugin</artifactId>
-  <version>2021.06</version>
+  <version>2022.06</version>
 
   <scm>
     <connection>scm:git:https://github.com/MyCoRe-Org/mir-mailer-with-file-plugin.git</connection>
@@ -34,7 +34,7 @@
   </scm>
 
   <properties>
-    <mycore.version>2021.06.1-SNAPSHOT</mycore.version>
+    <mycore.version>2022.06.3-SNAPSHOT</mycore.version>
   </properties>
 
   <build>
