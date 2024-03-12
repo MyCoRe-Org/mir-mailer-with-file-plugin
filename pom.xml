@@ -20,9 +20,9 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>org.mycore.mir</groupId>
-    <artifactId>mir-parent</artifactId>
-    <version>2022.06.3-SNAPSHOT</version>
+    <groupId>org.mycore</groupId>
+    <artifactId>mycore-parent</artifactId>
+    <version>51</version>
   </parent>
 
   <artifactId>mir-mailer-with-file-plugin</artifactId>
