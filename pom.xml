@@ -26,7 +26,7 @@
   </parent>
 
   <artifactId>mir-mailer-with-file-plugin</artifactId>
-  <version>2022.06</version>
+  <version>2022.06-SNAPSHOT</version>
 
   <scm>
     <connection>scm:git:https://github.com/MyCoRe-Org/mir-mailer-with-file-plugin.git</connection>
