@@ -28,6 +28,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import javax.imageio.ImageIO;
@@ -76,7 +77,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     }
 
     private static String getFormattedMailBody(RequestData requestData) {
-        return """
+        return String.format(Locale.ROOT, """
             %s sendet folgende Publikation zur Einreichung:
 
 
@@ -106,7 +107,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
                %s
 
 
-            """.formatted(
+            """,
             requestData.name(),
             requestData.name(),
             requestData.mail(),
