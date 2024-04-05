@@ -218,7 +218,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
                 Files.delete(file);
             }
         } catch (Exception e) {
-            LOGGER.warn("Will not send e-mail, file upload failed of file " + fileName);
+            LOGGER.error("Will not send e-mail, file upload failed of file " + fileName, e);
         }
 
         response.sendRedirect(baseUrl + "content/index.xml");
