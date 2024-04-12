@@ -65,6 +65,14 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     public static final String CAPTCHA_SESSION_KEY = "mwf_captcha";
     public static final String CAPTCHA_PLAY_SESSION_KEY = "mwf_captcha_play";
 
+    private static final List<String> DISALLOWED_MAIL_DOMAINS;
+
+    static {
+        DISALLOWED_MAIL_DOMAINS = MCRConfiguration2
+                .getOrThrow("MCR.mir-module.DisallowedMailDomains", MCRConfiguration2::splitValue)
+                .toList();
+    }
+
     private static ArrayList<String> getRecipients(boolean copy, String mail) {
         ArrayList<String> recipients = new ArrayList<>();
         recipients.add(MCRConfiguration2.getStringOrThrow(MCR_MODULE_EDITOR_MAIL));
@@ -194,11 +202,16 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         request.getSession().removeAttribute(CAPTCHA_SESSION_KEY);
         request.getSession().removeAttribute(CAPTCHA_PLAY_SESSION_KEY);
 
+        if (DISALLOWED_MAIL_DOMAINS.stream().anyMatch(requestData.mail()::endsWith)) {
+            LOGGER.error("Will not send e-mail, disallowed mail domain: " + requestData.mail());
+            response.sendRedirect(baseUrl + "content/index.xml");
+        }
+
         Part filePart = request.getPart("file"); // Retrieves <input type="file" name="file">
 
         if (filePart == null || filePart.getSize() == 0) {
             MCRMailer.send(sender, recipients, subject, body, Collections.emptyList(), false);
-            response.sendRedirect(formURL);
+            response.sendRedirect(baseUrl + "content/index.xml");
             return;
         }
 
