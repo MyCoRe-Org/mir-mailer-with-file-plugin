@@ -22,6 +22,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -256,43 +258,54 @@ public class MIRMailerWithFileServlet extends MCRServlet {
                 request.getParameter("comment"));
         }
 
+        private static String encodeURIComponent(String s) {
+                return URLEncoder.encode(s, StandardCharsets.UTF_8)
+                    .replaceAll("\\+", "%20")
+                    .replaceAll("\\%21", "!")
+                    .replaceAll("\\%27", "'")
+                    .replaceAll("\\%28", "(")
+                    .replaceAll("\\%29", ")")
+                    .replaceAll("\\%7E", "~");
+        }
+
         public String toURLParams() {
+
             StringBuilder sb = new StringBuilder();
             if (name() != null) {
-                sb.append("&name=").append(name());
+                sb.append("&name=").append(encodeURIComponent(name()));
             }
             if (mail() != null) {
-                sb.append("&mail=").append(mail());
+                sb.append("&mail=").append(encodeURIComponent(mail()));
             }
             if (institute() != null) {
-                sb.append("&institute=").append(institute());
+                sb.append("&institute=").append(encodeURIComponent(institute()));
             }
             if (faculty() != null) {
-                sb.append("&faculty=").append(faculty());
+                sb.append("&faculty=").append(encodeURIComponent(faculty()));
             }
             if (title_de() != null) {
-                sb.append("&title_de=").append(title_de());
+                sb.append("&title_de=").append(encodeURIComponent(title_de()));
             }
             if (title_en() != null) {
-                sb.append("&title_en=").append(title_en());
+                sb.append("&title_en=").append(encodeURIComponent(title_en()));
             }
             if (license() != null) {
-                sb.append("&license=").append(license());
+                sb.append("&license=").append(encodeURIComponent(license()));
             }
             if (keywords_de() != null) {
-                sb.append("&keywords_de=").append(keywords_de());
+                sb.append("&keywords_de=").append(encodeURIComponent(keywords_de()));
             }
             if (keywords_en() != null) {
-                sb.append("&keywords_en=").append(keywords_en());
+                sb.append("&keywords_en=").append(encodeURIComponent(keywords_en()));
             }
             if (abstract_de() != null) {
-                sb.append("&abstract_de=").append(abstract_de());
+                sb.append("&abstract_de=").append(encodeURIComponent(abstract_de()));
             }
             if (abstract_en() != null) {
-                sb.append("&abstract_en=").append(abstract_en());
+                sb.append("&abstract_en=").append(encodeURIComponent(abstract_en()));
             }
             if (comment() != null) {
-                sb.append("&comment=").append(comment());
+                sb.append("&comment=").append(encodeURIComponent(comment()));
             }
             return sb.toString();
         }
