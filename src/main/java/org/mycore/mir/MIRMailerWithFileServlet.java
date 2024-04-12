@@ -207,6 +207,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         if (DISALLOWED_MAIL_DOMAINS.stream().anyMatch(requestData.mail()::endsWith)) {
             LOGGER.error("Will not send e-mail, disallowed mail domain: " + requestData.mail());
             response.sendRedirect(baseUrl + "content/index.xml");
+            return;
         }
 
         Part filePart = request.getPart("file"); // Retrieves <input type="file" name="file">
