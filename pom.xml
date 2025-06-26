@@ -35,7 +35,7 @@
 
   <properties>
     <java.target.version>17</java.target.version>
-    <mycore.version>2023.06.1-SNAPSHOT</mycore.version>
+    <mycore.version>2023.06.3-SNAPSHOT</mycore.version>
   </properties>
 
   <build>
