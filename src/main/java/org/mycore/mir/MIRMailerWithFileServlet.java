@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Serial;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -56,12 +57,14 @@ import jakarta.servlet.http.Part;
 import net.logicsquad.nanocaptcha.audio.AudioCaptcha;
 import net.logicsquad.nanocaptcha.image.ImageCaptcha;
 
-
 /**
  * Servlet implementation class MIRMailerWithFileServlet
  */
 @MultipartConfig
 public class MIRMailerWithFileServlet extends MCRServlet {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
     private static final Logger LOGGER = LogManager.getLogger();
     public static final String MCR_MODULE_EDITOR_MAIL = "MCR.mir-module.EditorMail";
     public static final String CAPTCHA_SESSION_KEY = "mwf_captcha";
@@ -71,8 +74,8 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     static {
         DISALLOWED_MAIL_DOMAINS = MCRConfiguration2
-                .getOrThrow("MCR.mir-module.DisallowedMailDomains", MCRConfiguration2::splitValue)
-                .toList();
+            .getOrThrow("MCR.mir-module.DisallowedMailDomains", MCRConfiguration2::splitValue)
+            .toList();
     }
 
     private static ArrayList<String> getRecipients(boolean copy, String mail) {
@@ -135,23 +138,26 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     @Override
     protected void doGetPost(MCRServletJob job) throws ServletException, IOException {
+        LOGGER.debug(() -> "Starting...");
         HttpServletRequest request = job.getRequest();
         HttpServletResponse response = job.getResponse();
-
-        if (request.getParameter("action") == null) {
+        final String action = request.getParameter("action");
+        if (action == null) {
+            LOGGER.error(() -> "'action' parameter is required");
             response.sendRedirect(MCRFrontendUtil.getBaseURL(request) + "editor/submit_request.xed");
             return;
         }
 
-        switch (request.getParameter("action")) {
-        case "submit_request" -> handleSubmitRequest(request, response);
-        case "captcha" -> handleCaptchaRequest(job);
-        case "captcha-play" -> handleCaptchaPlayRequest(job);
-        default -> response.sendRedirect(MCRFrontendUtil.getBaseURL(request) + "editor/submit_request.xed");
+        switch (action) {
+            case "submit_request" -> handleSubmitRequest(request, response);
+            case "captcha" -> handleCaptchaRequest(job);
+            case "captcha-play" -> handleCaptchaPlayRequest(job);
+            default -> response.sendRedirect(MCRFrontendUtil.getBaseURL(request) + "editor/submit_request.xed");
         }
     }
 
     private void handleCaptchaRequest(MCRServletJob job) throws IOException {
+        LOGGER.debug(() -> "Handling captcha request...");
         job.getResponse().setContentType("image/png");
         ImageCaptcha imageCaptcha = new ImageCaptcha.Builder(200, 50).addContent().build();
         String captchaText = imageCaptcha.getContent();
@@ -163,6 +169,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     }
 
     private void handleCaptchaPlayRequest(MCRServletJob job) throws IOException {
+        LOGGER.debug(() -> "Handling captcha play request...");
         AudioCaptcha ac = new AudioCaptcha.Builder().addContent().build();
         String content = ac.getContent();
         job.getRequest().getSession().setAttribute(CAPTCHA_PLAY_SESSION_KEY, content);
@@ -175,6 +182,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     public void handleSubmitRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException,
         IOException {
+        LOGGER.debug(() -> "Handling submit request...");
         String reqCharEncoding = MCRConfiguration2.getString("MCR.Request.CharEncoding").orElse("UTF-8");
         request.setCharacterEncoding(reqCharEncoding);
 
@@ -189,7 +197,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         String sender = requestData.name() + "<" + requestData.mail() + ">";
         List<String> recipients = getRecipients(request.getParameterMap().containsKey("copy"), requestData.mail());
 
-        String subject   = "[Publikationsserver] - Online-Einreichung";
+        String subject = "[Publikationsserver] - Online-Einreichung";
         String body = getFormattedMailBody(requestData);
 
         String captcha = request.getParameter("captcha");
@@ -197,6 +205,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         String rightCaptchaPlay
             = request.getSession().getAttribute(CAPTCHA_PLAY_SESSION_KEY) instanceof String s ? s : null;
         if (captcha == null || (!Objects.equals(captcha, rightCaptcha) && !Objects.equals(captcha, rightCaptchaPlay))) {
+            LOGGER.debug(() -> "Captcha is invalid, sending error redirect");
             response.sendRedirect(formURL + "?error=captcha" + requestData.toURLParams());
             return;
         }
@@ -205,7 +214,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         request.getSession().removeAttribute(CAPTCHA_PLAY_SESSION_KEY);
 
         if (DISALLOWED_MAIL_DOMAINS.stream().anyMatch(requestData.mail()::endsWith)) {
-            LOGGER.error("Will not send e-mail, disallowed mail domain: " + requestData.mail());
+            LOGGER.error("Will not send e-mail, disallowed mail domain: {}", requestData.mail());
             response.sendRedirect(baseUrl + "content/index.xml");
             return;
         }
@@ -213,6 +222,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         Part filePart = request.getPart("file"); // Retrieves <input type="file" name="file">
 
         if (filePart == null || filePart.getSize() == 0) {
+            LOGGER.debug(() -> "Sending mail without attachment");
             MCRMailer.send(sender, recipients, subject, body, Collections.emptyList(), false);
             response.sendRedirect(baseUrl + "content/index.xml");
             return;
@@ -229,12 +239,13 @@ public class MIRMailerWithFileServlet extends MCRServlet {
                 Files.copy(fileContent, file);
                 List<String> parts = new ArrayList<>();
                 parts.add(file.toFile().toURI().toString());
+                LOGGER.debug(() -> "Sending mail with attachment");
                 MCRMailer.send(sender, recipients, subject, body, parts, false);
             } finally {
                 Files.delete(file);
             }
         } catch (Exception e) {
-            LOGGER.error("Will not send e-mail, file upload failed of file " + fileName, e);
+            LOGGER.error("Will not send e-mail, file upload failed of file {}", fileName, e);
         }
 
         response.sendRedirect(baseUrl + "content/index.xml");
@@ -260,13 +271,13 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         }
 
         private static String encodeURIComponent(String s) {
-                return URLEncoder.encode(s, StandardCharsets.UTF_8)
-                    .replaceAll("\\+", "%20")
-                    .replaceAll("\\%21", "!")
-                    .replaceAll("\\%27", "'")
-                    .replaceAll("\\%28", "(")
-                    .replaceAll("\\%29", ")")
-                    .replaceAll("\\%7E", "~");
+            return URLEncoder.encode(s, StandardCharsets.UTF_8)
+                .replaceAll("\\+", "%20")
+                .replaceAll("\\%21", "!")
+                .replaceAll("\\%27", "'")
+                .replaceAll("\\%28", "(")
+                .replaceAll("\\%29", ")")
+                .replaceAll("\\%7E", "~");
         }
 
         public String toURLParams() {
