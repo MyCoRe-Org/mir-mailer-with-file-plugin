@@ -30,6 +30,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -140,6 +141,10 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     protected void doGetPost(MCRServletJob job) throws ServletException, IOException {
         LOGGER.debug(() -> "Starting...");
         HttpServletRequest request = job.getRequest();
+        if (LOGGER.isDebugEnabled()) {
+            String message = buildRequestLogMessage(request);
+            LOGGER.debug(message);
+        }
         HttpServletResponse response = job.getResponse();
         final String action = request.getParameter("action");
         if (action == null) {
@@ -321,6 +326,32 @@ public class MIRMailerWithFileServlet extends MCRServlet {
             }
             return sb.toString();
         }
+    }
+
+    private static String buildRequestLogMessage(HttpServletRequest request) {
+        final StringBuilder logMessage = new StringBuilder();
+        logMessage.append("HTTP REQUEST - ")
+            .append("Method: ").append(request.getMethod())
+            .append(", URI: ").append(request.getRequestURI());
+
+        if (request.getQueryString() != null) {
+            logMessage.append("?").append(request.getQueryString());
+        }
+
+        logMessage.append("\nHeaders:");
+        final Enumeration<String> headerNames = request.getHeaderNames();
+        while (headerNames.hasMoreElements()) {
+            final String header = headerNames.nextElement();
+            logMessage.append("\n  ").append(header).append(": ").append(request.getHeader(header));
+        }
+
+        logMessage.append("\nParameters:");
+        final Enumeration<String> paramNames = request.getParameterNames();
+        while (paramNames.hasMoreElements()) {
+            final String param = paramNames.nextElement();
+            logMessage.append("\n  ").append(param).append(" = ").append(request.getParameter(param));
+        }
+        return logMessage.toString();
     }
 
 }
