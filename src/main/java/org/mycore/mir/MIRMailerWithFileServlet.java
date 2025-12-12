@@ -1,6 +1,6 @@
 /*
  * This file is part of ***  M y C o R e  ***
- * See http://www.mycore.de/ for details.
+ * See https://www.mycore.de/ for details.
  *
  * MyCoRe is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,22 +18,15 @@
 
 package org.mycore.mir;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serial;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.List;
+import java.net.URI;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 import javax.imageio.stream.ImageOutputStream;
@@ -41,129 +34,69 @@ import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.mycore.common.MCRMailer;
-import org.mycore.common.MCRUtils;
-import org.mycore.common.config.MCRConfiguration2;
-import org.mycore.frontend.MCRFrontendUtil;
-import org.mycore.frontend.servlets.MCRServlet;
-import org.mycore.frontend.servlets.MCRServletJob;
-
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.Part;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.mycore.common.config.MCRConfiguration2;
+import org.mycore.frontend.MCRFrontendUtil;
+import org.mycore.frontend.servlets.MCRServlet;
+import org.mycore.frontend.servlets.MCRServletJob;
+import org.mycore.mir.handler.MIRMailerFormHandler;
+
 import net.logicsquad.nanocaptcha.audio.AudioCaptcha;
 import net.logicsquad.nanocaptcha.image.ImageCaptcha;
 
 /**
- * Servlet implementation class MIRMailerWithFileServlet
+ * Servlet implementation class MIRMailerWithFileServlet.
  */
 @MultipartConfig
 public class MIRMailerWithFileServlet extends MCRServlet {
 
     @Serial
     private static final long serialVersionUID = 1L;
+
     private static final Logger LOGGER = LogManager.getLogger();
-    public static final String MCR_MODULE_EDITOR_MAIL = "MCR.mir-module.EditorMail";
-    public static final String CAPTCHA_SESSION_KEY = "mwf_captcha";
-    public static final String CAPTCHA_PLAY_SESSION_KEY = "mwf_captcha_play";
 
-    private static final List<String> DISALLOWED_MAIL_DOMAINS;
+    private static final String CAPTCHA_SESSION_KEY = "mwf_captcha";
+    private static final String CAPTCHA_PLAY_SESSION_KEY = "mwf_captcha_play";
+    private static final String ACTION_CAPTCHA = "captcha";
+    private static final String ACTION_CAPTCHA_PLAY = "captcha-play";
+    private static final String DEFAULT_REDIRECT_PATH = "content/index.xml";
 
-    static {
-        DISALLOWED_MAIL_DOMAINS = MCRConfiguration2
-            .getOrThrow("MCR.mir-module.DisallowedMailDomains", MCRConfiguration2::splitValue)
-            .toList();
-    }
+    private static final String CHAR_ENCODING =
+        MCRConfiguration2.getString("MCR.Request.CharEncoding").orElse("UTF-8");
 
-    private static ArrayList<String> getRecipients(boolean copy, String mail) {
-        ArrayList<String> recipients = new ArrayList<>();
-        recipients.add(MCRConfiguration2.getStringOrThrow(MCR_MODULE_EDITOR_MAIL));
-
-        if (copy) {
-            recipients.add(mail);
-        }
-
-        return recipients;
-    }
-
-    private static String getFormattedMailBody(RequestData requestData) {
-        return String.format(Locale.ROOT, """
-            %s sendet folgende Publikation zur Einreichung:
-
-
-            Angaben zur Person:
-
-               -------------------
-               Name:      %s
-               E-Mail:    %s
-               Institut:  %s
-               Fakultät:  %s
-
-
-               Angaben zur Publikation:
-               ------------------------
-               Titel (deutsch):            %s
-               Titel (englisch):           %s
-               Lizenz:                     %s
-               Schlagworte (deutsch):      %s
-               Schlagworte (englisch):     %s
-               zusammenfassung (deutsch):
-               %s
-
-               zusammenfassung (englisch):
-               %s
-
-               Anmerkungen:
-               %s
-
-
-            """,
-            requestData.name(),
-            requestData.name(),
-            requestData.mail(),
-            requestData.institute(),
-            requestData.faculty(),
-            requestData.title_de(),
-            requestData.title_en(),
-            requestData.license(),
-            requestData.keywords_de(),
-            requestData.keywords_en(),
-            requestData.abstract_de(),
-            requestData.abstract_en(),
-            requestData.comment());
-    }
+    private static final Set<String> DISALLOWED_MAIL_DOMAINS =
+        MCRConfiguration2.getOrThrow("MCR.mir-module" + ".DisallowedMailDomains", MCRConfiguration2::splitValue)
+            .collect(Collectors.toSet());
 
     @Override
     protected void doGetPost(MCRServletJob job) throws ServletException, IOException {
         LOGGER.debug(() -> "Starting...");
-        HttpServletRequest request = job.getRequest();
-        if (LOGGER.isDebugEnabled()) {
-            String message = buildRequestLogMessage(request);
-            LOGGER.debug(message);
-        }
-        HttpServletResponse response = job.getResponse();
-        final String action = request.getParameter("action");
+        final HttpServletRequest request = job.getRequest();
+        final HttpServletResponse response = job.getResponse();
+        request.setCharacterEncoding(CHAR_ENCODING);
+        LOGGER.debug(() -> MIRMailerWithFileServletHelper.buildRequestLogMessage(request));
+        final String action = request.getParameter(MIRMailerFormDataConstants.PARAM_ACTION);
         if (action == null) {
             LOGGER.error(() -> "'action' parameter is required");
-            response.sendRedirect(MCRFrontendUtil.getBaseURL(request) + "editor/submit_request.xed");
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
-
         switch (action) {
-            case "submit_request" -> handleSubmitRequest(request, response);
-            case "captcha" -> handleCaptchaRequest(job);
-            case "captcha-play" -> handleCaptchaPlayRequest(job);
-            default -> response.sendRedirect(MCRFrontendUtil.getBaseURL(request) + "editor/submit_request.xed");
+            case ACTION_CAPTCHA -> handleCaptchaRequest(job);
+            case ACTION_CAPTCHA_PLAY -> handleCaptchaPlayRequest(job);
+            default -> handleFormSubmitAction(request, response, action);
         }
     }
 
     private void handleCaptchaRequest(MCRServletJob job) throws IOException {
         LOGGER.debug(() -> "Handling captcha request...");
-        job.getResponse().setContentType("image/png");
         ImageCaptcha imageCaptcha = new ImageCaptcha.Builder(200, 50).addContent().build();
         String captchaText = imageCaptcha.getContent();
         job.getRequest().getSession().setAttribute(CAPTCHA_SESSION_KEY, captchaText);
@@ -185,173 +118,120 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         }
     }
 
-    public void handleSubmitRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException,
-        IOException {
-        LOGGER.debug(() -> "Handling submit request...");
-        String reqCharEncoding = MCRConfiguration2.getString("MCR.Request.CharEncoding").orElse("UTF-8");
-        request.setCharacterEncoding(reqCharEncoding);
+    private void handleFormSubmitAction(HttpServletRequest request, HttpServletResponse response, String action)
+        throws IOException, ServletException {
+        LOGGER.debug("Handling form submit action '{}'", action);
 
-        String baseUrl = MCRFrontendUtil.getBaseURL(request);
-        if (!baseUrl.endsWith("/")) {
-            baseUrl += "/";
-        }
-        String formURL = baseUrl + "editor/submit_request.xed";
+        final MIRMailerFormData formData = MIRMailerFormData.fromRequest(request);
 
-        RequestData requestData = RequestData.fromRequest(request);
-
-        String sender = requestData.name() + "<" + requestData.mail() + ">";
-        List<String> recipients = getRecipients(request.getParameterMap().containsKey("copy"), requestData.mail());
-
-        String subject = "[Publikationsserver] - Online-Einreichung";
-        String body = getFormattedMailBody(requestData);
-
-        String captcha = request.getParameter("captcha");
-        String rightCaptcha = request.getSession().getAttribute(CAPTCHA_SESSION_KEY) instanceof String s ? s : null;
-        String rightCaptchaPlay
-            = request.getSession().getAttribute(CAPTCHA_PLAY_SESSION_KEY) instanceof String s ? s : null;
-        if (captcha == null || (!Objects.equals(captcha, rightCaptcha) && !Objects.equals(captcha, rightCaptchaPlay))) {
-            LOGGER.debug(() -> "Captcha is invalid, sending error redirect");
-            response.sendRedirect(formURL + "?error=captcha" + requestData.toURLParams());
+        if (!validateCaptcha(request, response, formData)) {
             return;
         }
 
+        final Optional<MIRMailerFormHandler> handlerOpt = getFormHandler(action);
+        if (handlerOpt.isEmpty()) {
+            LOGGER.warn("No form handler configured for action '{}'", action);
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
+        final MIRMailerFormHandler handler = handlerOpt.get();
+
+        final String senderName = formData.getSenderName();
+        final String senderEmail = formData.getSenderEmail();
+
+        if (!validateSender(senderName, senderEmail, request, response)) {
+            return;
+        }
+        final String sender = String.format(Locale.ROOT, "%s <%s>", senderName, senderEmail);
+        try {
+            final Part filePart = Optional.ofNullable(request.getPart(MIRMailerFormDataConstants.PARAM_FILE))
+                .filter(f -> f.getSize() > 0).orElse(null);
+            final Part attachment = (filePart != null && handler.isAttachmentAllowed()) ? filePart : null;
+            if (filePart != null && attachment == null) {
+                LOGGER.warn("File part is not allowed, ignoring file");
+            }
+            handler.sendMail(sender, formData.getFields(), formData.isSendCopy(), attachment);
+            final String successRedirectUrl =
+                Optional.ofNullable(request.getParameter("redirect")).filter(MCRFrontendUtil::isSafeRedirect)
+                    .orElse(getDefaultRedirectUrl(request));
+            response.sendRedirect(response.encodeRedirectURL(successRedirectUrl));
+        } catch (MIRMailerException e) {
+            LOGGER.error("Error while sending mail", e);
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private boolean validateSender(String name, String email, HttpServletRequest request, HttpServletResponse response)
+        throws IOException {
+        if (!checkValidSender(name, email)) {
+            LOGGER.error("Expected fields {}, {}", MIRMailerFormDataConstants.PARAM_SENDER_NAME,
+                MIRMailerFormDataConstants.PARAM_SENDER_EMAIL);
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return false;
+        }
+        final String emailLowerCase = "@" + email.toLowerCase(Locale.ROOT);
+        if (DISALLOWED_MAIL_DOMAINS.stream().anyMatch(emailLowerCase::endsWith)) {
+            LOGGER.error("Will not send e-mail, disallowed email domain: {}", email);
+            response.sendRedirect(getDefaultRedirectUrl(request));
+            return false;
+        }
+        return true;
+    }
+
+    private boolean validateCaptcha(HttpServletRequest request, HttpServletResponse response,
+        MIRMailerFormData formData) throws IOException {
+        final String captcha = formData.getCaptcha();
+        if (!checkCaptcha(request, captcha)) {
+            clearCaptcha(request);
+            LOGGER.debug("Invalid captcha");
+            redirectWithCaptchaError(request, response, formData);
+            return false;
+        }
+        clearCaptcha(request);
+        return true;
+    }
+
+    private boolean checkCaptcha(HttpServletRequest request, String captcha) {
+        final String rightCaptcha = Optional.ofNullable(request.getSession().getAttribute(CAPTCHA_SESSION_KEY))
+            .filter(String.class::isInstance)
+            .map(String.class::cast)
+            .orElse(null);
+        final String rightCaptchaPlay = Optional.ofNullable(request.getSession().getAttribute(CAPTCHA_PLAY_SESSION_KEY))
+            .filter(String.class::isInstance)
+            .map(String.class::cast)
+            .orElse(null);
+        return captcha != null && (Objects.equals(captcha, rightCaptcha) || Objects.equals(captcha, rightCaptchaPlay));
+    }
+
+    private void redirectWithCaptchaError(HttpServletRequest request, HttpServletResponse response,
+        MIRMailerFormData formData) throws IOException {
+        final String referer = getSafeReferer(request);
+        final String separator = referer.contains("?") ? "&" : "?";
+        final String url =
+            referer + separator + "error=captcha" + MIRMailerWithFileServletHelper.getUrlParams(formData.getFields());
+        response.sendRedirect(url);
+    }
+
+    private String getSafeReferer(HttpServletRequest request) {
+        return Optional.ofNullable(getReferer(request)).map(URI::toString).filter(MCRFrontendUtil::isSafeRedirect)
+            .orElseGet(() -> getDefaultRedirectUrl(request));
+    }
+
+    private void clearCaptcha(HttpServletRequest request) {
         request.getSession().removeAttribute(CAPTCHA_SESSION_KEY);
         request.getSession().removeAttribute(CAPTCHA_PLAY_SESSION_KEY);
-
-        if (DISALLOWED_MAIL_DOMAINS.stream().anyMatch(requestData.mail()::endsWith)) {
-            LOGGER.error("Will not send e-mail, disallowed mail domain: {}", requestData.mail());
-            response.sendRedirect(baseUrl + "content/index.xml");
-            return;
-        }
-
-        Part filePart = request.getPart("file"); // Retrieves <input type="file" name="file">
-
-        if (filePart == null || filePart.getSize() == 0) {
-            LOGGER.debug(() -> "Sending mail without attachment");
-            MCRMailer.send(sender, recipients, subject, body, Collections.emptyList(), false);
-            response.sendRedirect(baseUrl + "content/index.xml");
-            return;
-        }
-
-        String fileName = Paths.get(filePart.getSubmittedFileName()).getFileName().toString(); // MSIE fix.
-
-        Path uploads = new File(MCRConfiguration2.getStringOrThrow("MIR.UploadForm.path")).toPath();
-        Path file = MCRUtils.safeResolve(uploads, fileName);
-
-        try {
-            InputStream fileContent = filePart.getInputStream();
-            try {
-                Files.copy(fileContent, file);
-                List<String> parts = new ArrayList<>();
-                parts.add(file.toFile().toURI().toString());
-                LOGGER.debug(() -> "Sending mail with attachment");
-                MCRMailer.send(sender, recipients, subject, body, parts, false);
-            } finally {
-                Files.delete(file);
-            }
-        } catch (Exception e) {
-            LOGGER.error("Will not send e-mail, file upload failed of file {}", fileName, e);
-        }
-
-        response.sendRedirect(baseUrl + "content/index.xml");
     }
 
-    record RequestData(String name, String mail, String institute, String faculty, String title_de, String title_en,
-        String license, String keywords_de, String keywords_en, String abstract_de, String abstract_en,
-        String comment) {
-        public static RequestData fromRequest(HttpServletRequest request) {
-            return new RequestData(
-                request.getParameter("name"),
-                request.getParameter("mail"),
-                request.getParameter("institute"),
-                request.getParameter("faculty"),
-                request.getParameter("title_de"),
-                request.getParameter("title_en"),
-                request.getParameter("license"),
-                request.getParameter("keywords_de"),
-                request.getParameter("keywords_en"),
-                request.getParameter("abstract_de"),
-                request.getParameter("abstract_en"),
-                request.getParameter("comment"));
-        }
-
-        private static String encodeURIComponent(String s) {
-            return URLEncoder.encode(s, StandardCharsets.UTF_8)
-                .replaceAll("\\+", "%20")
-                .replaceAll("\\%21", "!")
-                .replaceAll("\\%27", "'")
-                .replaceAll("\\%28", "(")
-                .replaceAll("\\%29", ")")
-                .replaceAll("\\%7E", "~");
-        }
-
-        public String toURLParams() {
-
-            StringBuilder sb = new StringBuilder();
-            if (name() != null) {
-                sb.append("&name=").append(encodeURIComponent(name()));
-            }
-            if (mail() != null) {
-                sb.append("&mail=").append(encodeURIComponent(mail()));
-            }
-            if (institute() != null) {
-                sb.append("&institute=").append(encodeURIComponent(institute()));
-            }
-            if (faculty() != null) {
-                sb.append("&faculty=").append(encodeURIComponent(faculty()));
-            }
-            if (title_de() != null) {
-                sb.append("&title_de=").append(encodeURIComponent(title_de()));
-            }
-            if (title_en() != null) {
-                sb.append("&title_en=").append(encodeURIComponent(title_en()));
-            }
-            if (license() != null) {
-                sb.append("&license=").append(encodeURIComponent(license()));
-            }
-            if (keywords_de() != null) {
-                sb.append("&keywords_de=").append(encodeURIComponent(keywords_de()));
-            }
-            if (keywords_en() != null) {
-                sb.append("&keywords_en=").append(encodeURIComponent(keywords_en()));
-            }
-            if (abstract_de() != null) {
-                sb.append("&abstract_de=").append(encodeURIComponent(abstract_de()));
-            }
-            if (abstract_en() != null) {
-                sb.append("&abstract_en=").append(encodeURIComponent(abstract_en()));
-            }
-            if (comment() != null) {
-                sb.append("&comment=").append(encodeURIComponent(comment()));
-            }
-            return sb.toString();
-        }
+    private boolean checkValidSender(String name, String email) {
+        return name != null && !name.isBlank() && email != null && !email.isBlank();
     }
 
-    private static String buildRequestLogMessage(HttpServletRequest request) {
-        final StringBuilder logMessage = new StringBuilder();
-        logMessage.append("HTTP REQUEST - ")
-            .append("Method: ").append(request.getMethod())
-            .append(", URI: ").append(request.getRequestURI());
-
-        if (request.getQueryString() != null) {
-            logMessage.append("?").append(request.getQueryString());
-        }
-
-        logMessage.append("\nHeaders:");
-        final Enumeration<String> headerNames = request.getHeaderNames();
-        while (headerNames.hasMoreElements()) {
-            final String header = headerNames.nextElement();
-            logMessage.append("\n  ").append(header).append(": ").append(request.getHeader(header));
-        }
-
-        logMessage.append("\nParameters:");
-        final Enumeration<String> paramNames = request.getParameterNames();
-        while (paramNames.hasMoreElements()) {
-            final String param = paramNames.nextElement();
-            logMessage.append("\n  ").append(param).append(" = ").append(request.getParameter(param));
-        }
-        return logMessage.toString();
+    private static String getDefaultRedirectUrl(HttpServletRequest request) {
+        return MCRFrontendUtil.getBaseURL(request) + DEFAULT_REDIRECT_PATH;
     }
 
+    private Optional<MIRMailerFormHandler> getFormHandler(String action) {
+        return MCRConfiguration2.<MIRMailerFormHandler>getSingleInstanceOf(
+            "MIRMailerWithFileServlet." + action + ".FormHandler.Class");
+    }
 }

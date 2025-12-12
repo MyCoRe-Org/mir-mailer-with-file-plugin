@@ -1,0 +1,24 @@
+{{name}} sendet folgende Publikation zur Einreichung:
+
+Angaben zur Person:
+-------------------
+Name:      {{name}}
+E-Mail:    {{mail}}
+Institut:  {{institute}}
+Fakultät:  {{faculty}}
+
+Angaben zur Publikation:
+------------------------
+Titel (deutsch):            {{title_de}}
+Titel (englisch):           {{title_en}}
+Lizenz:                     {{license}}
+Schlagworte (deutsch):      {{keywords_de}}
+Schlagworte (englisch):     {{keywords_en}}
+zusammenfassung (deutsch):
+{{abstract_de}}
+
+zusammenfassung (englisch):
+{{abstract_en}}
+
+Anmerkungen:
+{{comment}}
