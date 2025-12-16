@@ -25,6 +25,8 @@ window.addEventListener('load', () => {
     let captchaPlay = document.getElementById('captcha-play');
     let captchaStop = document.getElementById('captcha-stop');
 
+    let audio = null;
+
     // check if error=capcha is in the URL
     let url = new URL(window.location.href);
     let error = url.searchParams.get('error');
@@ -32,37 +34,48 @@ window.addEventListener('load', () => {
         captchaInput.classList.add('is-invalid');
     }
 
-    captchaInput.addEventListener('input', function() {
+    captchaInput.addEventListener('input', function () {
         captchaInput.classList.remove('is-invalid');
     });
 
-    captchaRefresh.addEventListener('click', function(e) {
+    captchaRefresh.addEventListener('click', function (e) {
         e.preventDefault();
-        captchaImage.src = captchaImage.src+'&rng='+Math.random();
-        audio = new Audio(window.webApplicationBaseURL + '/servlets/MIRMailerWithFile?action=captcha-play&rng='+Math.random());
-        audio.addEventListener('ended', onEnd);
+        captchaImage.src = captchaImage.src + '&rng=' + Math.random();
     });
 
-    let audio = new Audio(window.webApplicationBaseURL + '/servlets/MIRMailerWithFile?action=captcha-play');
+    const playAudioCaptcha = () => {
+        // Stop existing audio if any
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
 
-    audio.preload = 'auto';
+        audio = new Audio(window.webApplicationBaseURL + '/servlets/MIRMailerWithFile?action=captcha-play&rng=' + Math.random());
 
-    captchaPlay.addEventListener('click', function(e) {
-        e.preventDefault()
         audio.play();
-        captchaPlay.classList.add('d-none');
-        captchaStop.classList.remove('d-none');
-    });
+        captchaPlay?.classList.add('d-none');
+        captchaStop?.classList.remove('d-none');
 
-    const onEnd = function(e) {
-        e.preventDefault()
-        audio.pause();
-        audio.currentTime= 0;
-        captchaPlay.classList.remove('d-none');
-        captchaStop.classList.add('d-none');
+        audio.addEventListener('ended', onAudioEnd);
     };
 
-    captchaStop.addEventListener('click', onEnd);
-    audio.addEventListener('ended', onEnd);
+    const onAudioEnd = () => {
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+        captchaPlay?.classList.remove('d-none');
+        captchaStop?.classList.add('d-none');
+    };
+
+    captchaPlay?.addEventListener('click', (e) => {
+        e.preventDefault();
+        playAudioCaptcha();
+    });
+
+    captchaStop?.addEventListener('click', (e) => {
+        e.preventDefault();
+        onAudioEnd();
+    });
 
 });
