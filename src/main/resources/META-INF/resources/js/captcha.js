@@ -17,65 +17,62 @@
  */
 
 window.addEventListener('load', () => {
+  let captchaInput = document.getElementById('captcha-input');
+  let captchaImage = document.getElementById('captcha-image');
+  let captchaRefresh = document.getElementById('captcha-refresh');
+  let captchaPlay = document.getElementById('captcha-play');
+  let captchaStop = document.getElementById('captcha-stop');
 
+  let audio = null;
+  // check if error=capcha is in the URL
+  let url = new URL(window.location.href);
+  let error = url.searchParams.get('error');
 
-    let captchaInput = document.getElementById('captcha-input');
-    let captchaImage = document.getElementById('captcha-image');
-    let captchaRefresh = document.getElementById('captcha-refresh');
-    let captchaPlay = document.getElementById('captcha-play');
-    let captchaStop = document.getElementById('captcha-stop');
+  if (error === 'captcha') {
+    captchaInput.classList.add('is-invalid');
+  }
 
-    let audio = null;
+  captchaInput.addEventListener('input', function () {
+    captchaInput.classList.remove('is-invalid');
+  });
 
-    // check if error=capcha is in the URL
-    let url = new URL(window.location.href);
-    let error = url.searchParams.get('error');
-    if (error === 'captcha') {
-        captchaInput.classList.add('is-invalid');
+  captchaRefresh.addEventListener('click', function (e) {
+    e.preventDefault();
+    captchaImage.src = captchaImage.src + '&rng=' + Math.random();
+  });
+
+  const playAudioCaptcha = () => {
+    // Stop existing audio if any
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
     }
 
-    captchaInput.addEventListener('input', function () {
-        captchaInput.classList.remove('is-invalid');
-    });
+    audio = new Audio(window.webApplicationBaseURL + '/servlets/MIRMailerWithFile?action=captcha-play&rng=' + Math.random());
 
-    captchaRefresh.addEventListener('click', function (e) {
-        e.preventDefault();
-        captchaImage.src = captchaImage.src + '&rng=' + Math.random();
-    });
+    audio.play();
+    captchaPlay?.classList.add('d-none');
+    captchaStop?.classList.remove('d-none');
 
-    const playAudioCaptcha = () => {
-        // Stop existing audio if any
-        if (audio) {
-            audio.pause();
-            audio.currentTime = 0;
-        }
+    audio.addEventListener('ended', onAudioEnd);
+  };
 
-        audio = new Audio(window.webApplicationBaseURL + '/servlets/MIRMailerWithFile?action=captcha-play&rng=' + Math.random());
+  const onAudioEnd = () => {
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    captchaPlay?.classList.remove('d-none');
+    captchaStop?.classList.add('d-none');
+  };
 
-        audio.play();
-        captchaPlay?.classList.add('d-none');
-        captchaStop?.classList.remove('d-none');
+  captchaPlay?.addEventListener('click', (e) => {
+    e.preventDefault();
+    playAudioCaptcha();
+  });
 
-        audio.addEventListener('ended', onAudioEnd);
-    };
-
-    const onAudioEnd = () => {
-        if (audio) {
-            audio.pause();
-            audio.currentTime = 0;
-        }
-        captchaPlay?.classList.remove('d-none');
-        captchaStop?.classList.add('d-none');
-    };
-
-    captchaPlay?.addEventListener('click', (e) => {
-        e.preventDefault();
-        playAudioCaptcha();
-    });
-
-    captchaStop?.addEventListener('click', (e) => {
-        e.preventDefault();
-        onAudioEnd();
-    });
-
+  captchaStop?.addEventListener('click', (e) => {
+    e.preventDefault();
+    onAudioEnd();
+  });
 });
