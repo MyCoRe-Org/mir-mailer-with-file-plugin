@@ -134,7 +134,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         final HttpServletRequest request = job.getRequest();
         final HttpServletResponse response = job.getResponse();
         request.setCharacterEncoding(CHAR_ENCODING);
-        final FormData formData = FormData.fromRequest(request);
+        final FormData formData = FormData.ofRequest(request);
 
         if (!validateCaptcha(request, response, formData)) {
             return;
@@ -225,7 +225,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     private record FormData(String action, String captcha, String senderName, String senderEmail,
         Map<String, String> fields) {
 
-        public static FormData fromRequest(HttpServletRequest request) {
+        public static FormData ofRequest(HttpServletRequest request) {
             final Map<String, String> data = request.getParameterMap().entrySet().stream()
                 .filter(e -> !SENSITIVE_PARAMS.contains(e.getKey()))
                 .collect(Collectors.toMap(
