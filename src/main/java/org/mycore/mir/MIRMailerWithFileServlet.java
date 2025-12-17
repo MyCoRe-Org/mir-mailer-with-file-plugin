@@ -46,11 +46,13 @@ import jakarta.servlet.http.Part;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mycore.common.config.MCRConfiguration2;
+import org.mycore.common.config.MCRConfigurationException;
 import org.mycore.frontend.MCRFrontendUtil;
 import org.mycore.frontend.servlets.MCRServlet;
 import org.mycore.frontend.servlets.MCRServletJob;
+import org.mycore.mir.handler.MIRFormSubmissionHandler;
 import org.mycore.mir.handler.MIRFormSubmissionHandlerException;
-import org.mycore.mir.handler.MIRFormSubmissionMailHandler;
+import org.mycore.mir.handler.MIRFormSubmissionHandlerProvider;
 import org.mycore.mir.handler.MIRFormSubmissionRequest;
 import org.mycore.mir.handler.MIRInboundAttachment;
 
@@ -145,13 +147,14 @@ public class MIRMailerWithFileServlet extends MCRServlet {
             return;
         }
 
-        final Optional<MIRFormSubmissionMailHandler> handlerOpt = MIRMailerWithFileServletHelper.getHandler(action);
-        if (handlerOpt.isEmpty()) {
+        MIRFormSubmissionHandler handler;
+        try {
+            handler = MIRFormSubmissionHandlerProvider.obtainInstance(action);
+        } catch (MCRConfigurationException e) {
             LOGGER.warn("No form handler configured for action '{}'", action);
             response.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
-        final MIRFormSubmissionMailHandler handler = handlerOpt.get();
 
         final List<MIRInboundAttachment> attachments =
             Optional.ofNullable(request.getPart(PARAM_FILE)).stream().filter(p -> p.getSize() > 0)

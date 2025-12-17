@@ -23,12 +23,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import java.net.URLEncoder;
 import java.util.Enumeration;
 import java.util.Map;
-import java.util.Optional;
 
 import jakarta.servlet.http.HttpServletRequest;
-
-import org.mycore.common.config.MCRConfiguration2;
-import org.mycore.mir.handler.MIRFormSubmissionMailHandler;
 
 /**
  * Utility class for handling MIR mailer servlet requests and form data.
@@ -102,16 +98,5 @@ public final class MIRMailerWithFileServletHelper {
             logMessage.append("\n  ").append(param).append(" = ").append(request.getParameter(param));
         }
         return logMessage.toString();
-    }
-
-    /**
-     * Returns an optional instance of a specific mail handler for the given action.
-     *
-     * @param action the name of the action for which the handler should be retrieved
-     * @return an {@link Optional} containing the handler instance if available; otherwise {@link Optional#empty()}
-     */
-    public static Optional<MIRFormSubmissionMailHandler> getHandler(String action) {
-        return MCRConfiguration2.<MIRFormSubmissionMailHandler>getSingleInstanceOf(
-            "MIRMailerWithFileServlet." + action + ".FormHandler.Class");
     }
 }
