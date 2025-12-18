@@ -32,26 +32,27 @@ Each action is associated with a dedicated FormHandler.
 Example configuration:
 
 ```properties
-# FormHandler for the action "submit_request"
-MIRMailerWithFileServlet.submit_request.FormHandler.Class=org.mycore.mir.handler.MIRMailerFormHandler
-# Mail subject
-MIRMailerWithFileServlet.submit_request.FormHandler.Subject=[PublicationServer] - Online Submission
+# FormHandler "submit_request"
+MIR.FormSubmissionHandler.submit_request.Class=org.mycore.mir.handler.MIRFormSubmissionMailHandler
 # Sender (e.g., '<name> mail@domain.tld' or 'mail@domain.tld' or '<mail@domain.tld>')
-MIRMailerWithFileServlet.submit_request.FormHandler.Sender=%MCR.mir-module.EditorMail%
+MIR.FormSubmissionHandler.submit_request.Sender=%MCR.mir-module.EditorMail%
 # Comma seperated recipients (e.g. 'a,b,c'), see .Sender for format
-MIRMailerWithFileServlet.submit_request.FormHandler.Recipients=%MCR.mir-module.EditorMail%
+MIR.FormSubmissionHandler.submit_request.Recipients=%MCR.mir-module.EditorMail%
 # Body generator for the mail content
-MIRMailerWithFileServlet.submit_request.FormHandler.BodyGenerator.Class=org.mycore.mir.handler.MIRSimpleTemplateMailBodyGenerator
-MIRMailerWithFileServlet.submit_request.FormHandler.BodyGenerator.TemplateLoader.Class=org.mycore.mir.handler.MIRStringTemplateLoader
-MIRMailerWithFileServlet.submit_request.FormHandler.BodyGenerator.TemplateLoader.File=/submit_request_template.txt
+MIR.FormSubmissionHandler.submit_request.BodyGenerator.Class=org.mycore.mir.handler.MIRSimpleTemplateMailBodyGenerator
+MIR.FormSubmissionHandler.submit_request.BodyGenerator.TemplateLoader.Class=org.mycore.mir.handler.MIRStringTemplateLoader
+MIR.FormSubmissionHandler.submit_request.BodyGenerator.TemplateLoader.File=/submit_request_template.txt
+# Mail subject
+MIR.FormSubmissionHandler.submit_request.Subject=[PublicationServer] - Online Submission
 # Allow attachments
-MIRMailerWithFileServlet.submit_request.FormHandler.AttachmentAllowed=true
+MIR.FormSubmissionHandler.submit_request.AttachmentAllowed=true
 # Comma seperated extra required field names (optional)
-MIRMailerWithFileServlet.submit_request.FormHandler.RequiredFieldNames=
+MIR.FormSubmissionHandler.submit_request.RequiredFieldNames=
 ```
 
 ## Frontend Integration
 The plugin provides the **`MIRMailerWithFileServlet`**, which processes different actions and recognizes special form fields.
+The servlet handles captcha or maps the action to a defined form submission handler.
 
 ### Actions
 | Path           | Purpose                                                         |
