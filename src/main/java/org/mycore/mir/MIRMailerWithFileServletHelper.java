@@ -43,10 +43,7 @@ public final class MIRMailerWithFileServletHelper {
         final StringBuilder sb = new StringBuilder();
         params.forEach((key, value) -> {
             if (value != null) {
-                sb.append("&")
-                    .append(encodeUriComponent(key))
-                    .append("=")
-                    .append(encodeUriComponent(value));
+                sb.append('&').append(encodeUriComponent(key)).append('=').append(encodeUriComponent(value));
             }
         });
         return sb.toString();
@@ -76,12 +73,11 @@ public final class MIRMailerWithFileServletHelper {
      */
     public static String buildRequestLogMessage(HttpServletRequest request) {
         final StringBuilder logMessage = new StringBuilder();
-        logMessage.append("HTTP REQUEST - ")
-            .append("Method: ").append(request.getMethod())
-            .append(", URI: ").append(request.getRequestURI());
+        logMessage.append("HTTP REQUEST - ").append("Method: ").append(request.getMethod()).append(", URI: ")
+            .append(request.getRequestURI());
 
         if (request.getQueryString() != null) {
-            logMessage.append("?").append(request.getQueryString());
+            logMessage.append('?').append(request.getQueryString());
         }
 
         logMessage.append("\nHeaders:");

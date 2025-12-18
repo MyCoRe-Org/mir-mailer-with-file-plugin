@@ -23,6 +23,7 @@ import org.mycore.common.config.MCRConfiguration2;
 /**
  * Provider for {@link MIRFormSubmissionHandler} instances.
  */
+@SuppressWarnings("PMD.ClassNamingConventions")
 public final class MIRFormSubmissionHandlerProvider {
 
     private static final String HANDLER_PROPERTY_PREFIX = "MIR.FormSubmissionHandler.";

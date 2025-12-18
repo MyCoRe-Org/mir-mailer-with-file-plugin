@@ -30,4 +30,4 @@ import java.util.Map;
 public record MIRFormSubmissionRequest (
     Map<String, String> fields,
     List<MIRInboundAttachment> attachments
-) {};
+) {}
