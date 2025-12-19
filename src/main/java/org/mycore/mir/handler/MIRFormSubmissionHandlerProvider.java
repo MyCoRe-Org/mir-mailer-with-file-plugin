@@ -42,7 +42,7 @@ public final class MIRFormSubmissionHandlerProvider {
      */
     public static MIRFormSubmissionHandler obtainInstance(String id) {
         final String property = HANDLER_PROPERTY_PREFIX + id + ".Class";
-        return (MIRFormSubmissionHandler) MCRConfiguration2.getSingleInstanceOf(property)
+        return MCRConfiguration2.getSingleInstanceOf(MIRFormSubmissionHandler.class, property)
             .orElseThrow(() -> MCRConfiguration2.createConfigurationException(property));
     }
 }
