@@ -17,6 +17,7 @@
   <properties>
     <java.target.version>17</java.target.version>
     <mycore.version>2023.06.4-SNAPSHOT</mycore.version>
+    <nanocaptcha.version>1.3</nanocaptcha.version>
   </properties>
   <build>
     <plugins>
@@ -74,7 +75,7 @@
     <dependency>
       <groupId>net.logicsquad</groupId>
       <artifactId>nanocaptcha</artifactId>
-      <version>1.3</version>
+      <version>${nanocaptcha.version}</version>
     </dependency>
     <dependency>
       <groupId>jakarta.servlet</groupId>
