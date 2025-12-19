@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
 import org.mycore.common.config.MCRConfigurationException;
 import org.mycore.common.config.annotation.MCRConfigurationProxy;
 import org.mycore.common.config.annotation.MCRProperty;
+import org.mycore.resource.MCRResourceHelper;
 
 /**
  * Implementation of {@link MIRMailBodyRenderer} that renders a mail body from a string template.
@@ -74,7 +75,7 @@ public class MIRStringTemplateMailBodyRenderer implements MIRMailBodyRenderer {
 
         @Override
         public MIRStringTemplateMailBodyRenderer get() {
-            try (InputStream in = getClass().getResourceAsStream(templatePath)) {
+            try (InputStream in = MCRResourceHelper.getResourceAsStream(templatePath)) {
                 if (in == null) {
                     throw new MCRConfigurationException("Template not found: " + templatePath);
                 }
