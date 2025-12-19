@@ -151,7 +151,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         try {
             handler = MIRFormSubmissionHandlerProvider.obtainInstance(action);
         } catch (MCRConfigurationException e) {
-            LOGGER.warn("No form handler configured for action '{}'", action);
+            LOGGER.error("Failed to instantiate form handler for action '{}'", action, e);
             response.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }

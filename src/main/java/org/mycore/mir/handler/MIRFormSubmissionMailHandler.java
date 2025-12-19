@@ -58,7 +58,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     private final String sender;
     private final List<String> recipients;
     private final String subject;
-    private final MIRMailBodyGenerator bodyGenerator;
+    private final MIRMailBodyRenderer bodyRenderer;
     private final List<String> requiredFieldNames;
     private final boolean attachmentAllowed;
 
@@ -71,7 +71,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         this.sender = config.sender;
         this.recipients = config.recipients();
         this.subject = config.subject;
-        this.bodyGenerator = config.bodyGenerator;
+        this.bodyRenderer = config.bodyRenderer;
         this.requiredFieldNames = config.requiredFieldNames;
         this.attachmentAllowed = config.attachmentAllowed();
     }
@@ -82,7 +82,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         checkFields(fields);
         final List<Path> tempFiles = new ArrayList<>();
         try {
-            final String body = bodyGenerator.generateBody(fields);
+            final String body = bodyRenderer.render(formSubmissionRequest);
             if (!formSubmissionRequest.attachments().isEmpty()) {
                 if (!attachmentAllowed) {
                     throw new MIRFormSubmissionHandlerException("File part is not allowed");
@@ -107,7 +107,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             }
         } catch (IOException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: error handling attachments", e);
-        } catch (MCRException | IllegalArgumentException e) {
+        } catch (MCRException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: " + e.getMessage(), e);
         } finally {
             tempFiles.forEach(tempFile -> {
@@ -167,12 +167,12 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
      * @param sender the sender email address (From)
      * @param recipients list of recipient email addresses that will receive the form submission
      * @param subject the subject of the mail
-     * @param bodyGenerator generator responsible for creating the email body from the submitted form data
+     * @param bodyRenderer renderer responsible for creating the email body from the submitted form data
      * @param requiredFieldNames field names that must be present in the form submission
      * @param attachmentAllowed indicates whether file attachments are allowed in the form submission
      */
     public record FormSubmissionHandlerConfig(String sender, List<String> recipients, String subject,
-        MIRMailBodyGenerator bodyGenerator, List<String> requiredFieldNames, boolean attachmentAllowed) {
+        MIRMailBodyRenderer bodyRenderer, List<String> requiredFieldNames, boolean attachmentAllowed) {
     }
 
     /**
@@ -199,10 +199,10 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         public String subject;
 
         /**
-         * The body generator instance used to create the mail body.
+         * The body renderer instance used to create the mail body.
          */
-        @MCRInstance(name = "BodyGenerator", valueClass = MIRMailBodyGenerator.class)
-        public MIRMailBodyGenerator bodyGenerator;
+        @MCRInstance(name = "BodyRenderer", valueClass = MIRMailBodyRenderer.class)
+        public MIRMailBodyRenderer bodyRenderer;
 
         /**
          * Comma-separated list of extra required fields.
@@ -226,7 +226,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             final boolean attachmentAllowed = Optional.ofNullable(attachmentAllowedString).map(Boolean::valueOf)
                 .orElse(false);
             final FormSubmissionHandlerConfig config = new FormSubmissionHandlerConfig(sender, recipients,
-                subject, bodyGenerator, requiredFieldNames, attachmentAllowed);
+                subject, bodyRenderer, requiredFieldNames, attachmentAllowed);
             return new MIRFormSubmissionMailHandler(config);
         }
     }

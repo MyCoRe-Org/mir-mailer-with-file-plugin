@@ -18,19 +18,20 @@
 
 package org.mycore.mir.handler;
 
-import java.util.Map;
-
 /**
- * Interface for generating a mail body based on a set of provided form data.
+ * Renders a mail body based on a form submission.
+ * <p>
+ * Implementations may use different rendering strategies such as
+ * string templates, XSLT, or template engines.
  */
-public interface MIRMailBodyGenerator {
+public interface MIRMailBodyRenderer {
 
     /**
-     * Generates the mail body using the supplied form data.
+     * Renders the mail body using the given form submission data.
      *
-     * @param formData a map containing the key–value pairs required to build the mail body
-     * @return the generated mail body as a string
-     * @throws IllegalArgumentException if an error occurs during mail body generation
+     * @param request the form submission containing all data required to render the mail body
+     * @return the rendered mail body as a string
+     * @throws MIRMailBodyRenderingException if rendering fails
      */
-    String generateBody(Map<String, String> formData) throws IllegalArgumentException;
+    String render(MIRFormSubmissionRequest request);
 }

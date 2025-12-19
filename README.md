@@ -9,7 +9,7 @@ configurable form submission handlers.
 - Validates **captchas** on form submission
 - Supports **file uploads**
 - Allows **configurable form submission handlers** per action
-- Template-based email body generation
+- Template-based mail body rendering
 - Filters unwanted sender domains
 - Unified servlet backend for all mail forms
 
@@ -38,10 +38,9 @@ MIR.FormSubmissionHandler.submit_request.Class=org.mycore.mir.handler.MIRFormSub
 MIR.FormSubmissionHandler.submit_request.Sender=%MCR.mir-module.EditorMail%
 # Comma seperated recipients (e.g. 'a,b,c'), see .Sender for format
 MIR.FormSubmissionHandler.submit_request.Recipients=%MCR.mir-module.EditorMail%
-# Body generator for the mail content
-MIR.FormSubmissionHandler.submit_request.BodyGenerator.Class=org.mycore.mir.handler.MIRSimpleTemplateMailBodyGenerator
-MIR.FormSubmissionHandler.submit_request.BodyGenerator.TemplateLoader.Class=org.mycore.mir.handler.MIRStringTemplateLoader
-MIR.FormSubmissionHandler.submit_request.BodyGenerator.TemplateLoader.File=/submit_request_template.txt
+# Body renderer for the mail
+MIR.FormSubmissionHandler.submit_request.BodyRenderer.Class=org.mycore.mir.handler.MIRStringTemplateMailBodyRenderer
+MIR.FormSubmissionHandler.submit_request.BodyRenderer.TemplatePath=/submit_request_template.txt
 # Mail subject
 MIR.FormSubmissionHandler.submit_request.Subject=[PublicationServer] - Online Submission
 # Allow attachments
