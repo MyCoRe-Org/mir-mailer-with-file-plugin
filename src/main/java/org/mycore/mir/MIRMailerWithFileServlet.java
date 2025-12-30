@@ -143,6 +143,11 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         }
 
         final String senderEmail = formData.senderEmail();
+        if (senderEmail == null) {
+            LOGGER.error(() -> "'mail' parameter is required");
+            response.sendRedirect(getDefaultRedirectUrl(request));
+            return;
+        }
         if (!validateSender(senderEmail, request, response)) {
             return;
         }
@@ -185,7 +190,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     private boolean validateCaptcha(HttpServletRequest request, HttpServletResponse response, FormData formData)
         throws IOException {
         final String captcha = formData.captcha;
-        if (!checkCaptcha(request, captcha)) {
+        if (captcha == null || !checkCaptcha(request, captcha)) {
             clearCaptcha(request);
             LOGGER.debug("Invalid captcha");
             redirectWithCaptchaError(request, response, formData);
