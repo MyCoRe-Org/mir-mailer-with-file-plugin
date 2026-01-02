@@ -25,9 +25,12 @@ configurable form submission handlers.
 
 ### Configuring a from submission handler for an action
 Each action is associated with a dedicated FormSubmissionHandler.
+Optionally, captcha validation can be activated.
 Example configuration:
 
 ```properties
+# Enable captcha validation
+MIR.MailerWithFileServlet.submit_request.CaptchaRequired=true
 # FormSubmissionHandler for action "submit_request"
 MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Class=org.mycore.mir.handler.MIRFormSubmissionMailHandler
 # Sender (e.g., '<name> mail@domain.tld' or 'mail@domain.tld' or '<mail@domain.tld>')

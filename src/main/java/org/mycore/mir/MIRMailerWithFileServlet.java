@@ -138,7 +138,10 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         request.setCharacterEncoding(CHAR_ENCODING);
         final FormData formData = FormData.ofRequest(request);
 
-        if (!validateCaptcha(request, response, formData)) {
+        final boolean requiresCaptcha =
+            MCRConfiguration2.getBoolean(PROPERTY_PREFIX + action + "CaptchaRequired").orElse(false);
+
+        if (requiresCaptcha && !validateCaptcha(request, response, formData)) {
             return;
         }
 
