@@ -37,6 +37,7 @@ import org.mycore.common.MCRException;
 import org.mycore.common.MCRMailer;
 import org.mycore.common.MCRUtils;
 import org.mycore.common.config.MCRConfiguration2;
+import org.mycore.common.config.MCRConfigurationException;
 import org.mycore.common.config.annotation.MCRConfigurationProxy;
 import org.mycore.common.config.annotation.MCRInstance;
 import org.mycore.common.config.annotation.MCRProperty;
@@ -53,14 +54,12 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     private static final String FIELD_SENDER_EMAIL = "mail";
     private static final String FIELD_COPY = "copy";
 
-    private static final String UPLOAD_PATH = MCRConfiguration2.getStringOrThrow("MIR.UploadForm.path");
-
     private final String sender;
     private final List<String> recipients;
     private final String subject;
     private final MIRMailBodyRenderer bodyRenderer;
     private final List<String> requiredFieldNames;
-    private final boolean attachmentAllowed;
+    private final AttachmentConfig attachmentConfig;
 
     /**
      * Constructs a MIRFormSubmissionMailHandler.
@@ -73,7 +72,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         this.subject = config.subject;
         this.bodyRenderer = config.bodyRenderer;
         this.requiredFieldNames = config.requiredFieldNames;
-        this.attachmentAllowed = config.attachmentAllowed();
+        this.attachmentConfig = config.attachmentConfig();
     }
 
     @Override
@@ -84,11 +83,12 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         try {
             final String body = bodyRenderer.render(formSubmissionRequest);
             if (!formSubmissionRequest.attachments().isEmpty()) {
-                if (!attachmentAllowed) {
-                    throw new MIRFormSubmissionHandlerException("File part is not allowed");
+                if (attachmentConfig == null || !attachmentConfig.isEnabled()) {
+                    throw new MIRFormSubmissionHandlerException("Attachments are not allowed");
                 }
+                validateAttachments(formSubmissionRequest.attachments());
                 for (MIRInboundAttachment attachment : formSubmissionRequest.attachments()) {
-                    tempFiles.add(uploadFile(attachment));
+                    tempFiles.add(uploadFile(attachmentConfig.uploadPath(), attachment));
                 }
             }
             final List<String> parts = tempFiles.stream().map(Path::toUri).map(URI::toString).toList();
@@ -120,8 +120,35 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         }
     }
 
-    private Path uploadFile(MIRInboundAttachment attachment) throws IOException {
-        final Path uploads = new File(UPLOAD_PATH).toPath();
+    private void validateAttachments(List<MIRInboundAttachment> attachments) {
+        final Integer minCount = attachmentConfig.minCount;
+        if (minCount != null && attachments.size() < minCount) {
+            throw new MIRFormSubmissionHandlerException("Not enough attachments: min allowed is " + minCount);
+        }
+        final Integer maxCount = attachmentConfig.maxCount();
+        if (maxCount != null && attachments.size() > maxCount) {
+            throw new MIRFormSubmissionHandlerException("Too many attachments: max allowed is " + maxCount);
+        }
+        long totalSize = 0;
+        final Long maxFileSize = attachmentConfig.maxFileSize();
+        final Long maxTotalSize = attachmentConfig.maxTotalSize();
+        for (MIRInboundAttachment attachment : attachments) {
+            final long size = attachment.size();
+            if (maxFileSize != null && size > maxFileSize) {
+                throw new MIRFormSubmissionHandlerException(
+                    "Attachment " + attachment.filename() + " exceeds max file size of " + maxFileSize + " bytes"
+                );
+            }
+            totalSize += size;
+        }
+        if (maxTotalSize != null && totalSize > maxTotalSize) {
+            throw new MIRFormSubmissionHandlerException(
+                "Total attachment size exceeds max allowed of " + maxTotalSize + " bytes");
+        }
+    }
+
+    private Path uploadFile(String uploadPath, MIRInboundAttachment attachment) throws IOException {
+        final Path uploads = new File(uploadPath).toPath();
         final String filename = attachment.filename();
         if (filename.isBlank() || filename.length() > 255) {
             throw new IllegalArgumentException("Invalid file name");
@@ -161,6 +188,28 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         return Optional.ofNullable(fields.get(FIELD_COPY)).map(Boolean::valueOf).orElse(false);
     }
 
+     /**
+     * Configuration for handling attachments in a form submission.
+     *
+     * @param uploadPath path where attachments should be uploaded
+     * @param minCount optional minimum number of attachments allowed
+     * @param maxCount optional maximum number of attachments allowed
+     * @param maxFileSize optional maximum size of a single attachment in bytes
+     * @param maxTotalSize optional maximum total size of all attachments in bytes
+     */
+    public record AttachmentConfig(String uploadPath, Integer minCount, Integer maxCount, Long maxFileSize,
+         Long maxTotalSize) {
+
+         /**
+          * Returns whether attachments are enabled.
+          *
+          * @return true if attachments are allowed, false otherwise
+          */
+        public boolean isEnabled() {
+            return maxCount == null || maxCount > 0;
+        }
+    }
+
     /**
      * Configuration object for handling form submissions.
      *
@@ -169,10 +218,10 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
      * @param subject the subject of the mail
      * @param bodyRenderer renderer responsible for creating the email body from the submitted form data
      * @param requiredFieldNames field names that must be present in the form submission
-     * @param attachmentAllowed indicates whether file attachments are allowed in the form submission
+     * @param attachmentConfig attachment config for submission
      */
     public record FormSubmissionHandlerConfig(String sender, List<String> recipients, String subject,
-        MIRMailBodyRenderer bodyRenderer, List<String> requiredFieldNames, boolean attachmentAllowed) {
+        MIRMailBodyRenderer bodyRenderer, List<String> requiredFieldNames, AttachmentConfig attachmentConfig) {
     }
 
     /**
@@ -211,10 +260,34 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         public String requiredFieldNamesString;
 
         /**
-         * Whether attachments are allowed.
+         * Path for attachment uploads.
          */
-        @MCRProperty(name = "AttachmentAllowed", required = false)
-        public String attachmentAllowedString;
+        @MCRProperty(name = "Attachment.UploadPath", required = false)
+        public String uploadPath;
+
+        /**
+         * Optional maximum total size of all attachments in bytes.
+         */
+        @MCRProperty(name = "Attachment.MaxFileSize", required = false)
+        public String maxFileSize;
+
+        /**
+         * Optional min number of attachments allowed.
+         */
+        @MCRProperty(name= "Attachment.MinCount", required = false)
+        public String minCount;
+
+        /**
+         * Optional maximum number of attachments allowed.
+         */
+        @MCRProperty(name= "Attachment.MaxCount", required = false)
+        public String maxCount;
+
+        /**
+         * Optional maximum size of a single attachment in bytes.
+         */
+        @MCRProperty(name = "Attachment.MaxTotalSize", required = false)
+        public String maxTotalSize;
 
         @Override
         public MIRFormSubmissionMailHandler get() {
@@ -223,11 +296,29 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
                     .distinct().toList();
             final List<String> recipients =
                 Optional.of(recipientsString).stream().flatMap(MCRConfiguration2::splitValue).toList();
-            final boolean attachmentAllowed = Optional.ofNullable(attachmentAllowedString).map(Boolean::valueOf)
-                .orElse(false);
-            final FormSubmissionHandlerConfig config = new FormSubmissionHandlerConfig(sender, recipients,
-                subject, bodyRenderer, requiredFieldNames, attachmentAllowed);
+            final FormSubmissionHandlerConfig config = new FormSubmissionHandlerConfig(sender, recipients, subject,
+                bodyRenderer, requiredFieldNames, getAttachmentConfig());
             return new MIRFormSubmissionMailHandler(config);
+        }
+
+        private AttachmentConfig getAttachmentConfig() {
+            final Integer attachmentMinCount = Optional.ofNullable(minCount).map(Integer::valueOf).orElse(null);
+            final Integer attachmentMaxCount = Optional.ofNullable(maxCount).map(Integer::valueOf).orElse(null);
+            if (attachmentMinCount != null && attachmentMaxCount != null && attachmentMinCount > attachmentMaxCount) {
+                throw new MCRConfigurationException("Attachments min count can't be greater than max count");
+            }
+            final Long attachmentMaxFileSize = Optional.ofNullable(maxFileSize).map(Long::valueOf).orElse(null);
+            final Long attachmentMaxTotalSize = Optional.ofNullable(maxTotalSize).map(Long::valueOf).orElse(null);
+            if (attachmentMaxFileSize != null && attachmentMaxTotalSize != null
+                && attachmentMaxFileSize > attachmentMaxTotalSize) {
+                throw new MCRConfigurationException("Attachments max file size can't be greater than max total size");
+            }
+            if (uploadPath == null && (attachmentMaxFileSize != null || attachmentMaxTotalSize != null
+                || attachmentMinCount != null || attachmentMaxCount != null)) {
+                throw new MCRConfigurationException("Attachments upload is required");
+            }
+            return new AttachmentConfig(uploadPath, attachmentMinCount, attachmentMaxCount, attachmentMaxFileSize,
+                attachmentMaxTotalSize);
         }
     }
 }

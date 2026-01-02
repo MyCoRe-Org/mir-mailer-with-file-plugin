@@ -21,10 +21,6 @@ configurable form submission handlers.
 ### Required Properties
 - **`MIR.MailerWithFileServlet.DisallowedEmailDomains`**  
   A list of blocked sender domains.
-
-- **`MIR.UploadForm.path`**  
-  Temporary storage location for uploaded files.
-
 ---
 
 ### Configuring a from submission handler for an action
@@ -43,10 +39,18 @@ MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.BodyRenderer.Clas
 MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.BodyRenderer.TemplatePath=/submit_request_template.txt
 # Mail subject
 MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Subject=[PublicationServer] - Online Submission
-# Allow attachments
-MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.AttachmentAllowed=true
 # Comma seperated extra required field names (optional)
 MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.RequiredFieldNames=
+# Attachment upload path
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Attachment.UploadPath=%MCR.datadir%/fileupload
+# Attachment min count (optional)
+#MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Attachment.MinCount=1
+# Attachment max count (optional)
+#MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Attachment.MaxCount=1
+# Attachment max file size in bytes (optional)
+#MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Attachment.MaxFileSize=
+# Attachment max total count in bytes (optional)
+#MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Attachment.MaxTotalCount=
 ```
 
 ## Frontend Integration
