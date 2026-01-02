@@ -19,7 +19,7 @@ configurable form submission handlers.
 
 ## Configuration
 ### Required Properties
-- **`MCR.mir-module.DisallowedMailDomains`**  
+- **`MIR.MailerWithFileServlet.DisallowedEmailDomains`**  
   A list of blocked sender domains.
 
 - **`MIR.UploadForm.path`**  
@@ -27,26 +27,26 @@ configurable form submission handlers.
 
 ---
 
-### Configuring a Form Submission Handler
-Each action is associated with a dedicated FormHandler.
+### Configuring a from submission handler for an action
+Each action is associated with a dedicated FormSubmissionHandler.
 Example configuration:
 
 ```properties
-# FormHandler "submit_request"
-MIR.FormSubmissionHandler.submit_request.Class=org.mycore.mir.handler.MIRFormSubmissionMailHandler
+# FormSubmissionHandler for action "submit_request"
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Class=org.mycore.mir.handler.MIRFormSubmissionMailHandler
 # Sender (e.g., '<name> mail@domain.tld' or 'mail@domain.tld' or '<mail@domain.tld>')
-MIR.FormSubmissionHandler.submit_request.Sender=%MCR.mir-module.EditorMail%
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Sender=%MCR.mir-module.EditorMail%
 # Comma seperated recipients (e.g. 'a,b,c'), see .Sender for format
-MIR.FormSubmissionHandler.submit_request.Recipients=%MCR.mir-module.EditorMail%
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Recipients=%MCR.mir-module.EditorMail%
 # Body renderer for the mail
-MIR.FormSubmissionHandler.submit_request.BodyRenderer.Class=org.mycore.mir.handler.MIRStringTemplateMailBodyRenderer
-MIR.FormSubmissionHandler.submit_request.BodyRenderer.TemplatePath=/submit_request_template.txt
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.BodyRenderer.Class=org.mycore.mir.handler.MIRStringTemplateMailBodyRenderer
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.BodyRenderer.TemplatePath=/submit_request_template.txt
 # Mail subject
-MIR.FormSubmissionHandler.submit_request.Subject=[PublicationServer] - Online Submission
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Subject=[PublicationServer] - Online Submission
 # Allow attachments
-MIR.FormSubmissionHandler.submit_request.AttachmentAllowed=true
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.AttachmentAllowed=true
 # Comma seperated extra required field names (optional)
-MIR.FormSubmissionHandler.submit_request.RequiredFieldNames=
+MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.RequiredFieldNames=
 ```
 
 ## Frontend Integration

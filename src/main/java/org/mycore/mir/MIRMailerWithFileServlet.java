@@ -46,13 +46,11 @@ import jakarta.servlet.http.Part;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mycore.common.config.MCRConfiguration2;
-import org.mycore.common.config.MCRConfigurationException;
 import org.mycore.frontend.MCRFrontendUtil;
 import org.mycore.frontend.servlets.MCRServlet;
 import org.mycore.frontend.servlets.MCRServletJob;
 import org.mycore.mir.handler.MIRFormSubmissionHandler;
 import org.mycore.mir.handler.MIRFormSubmissionHandlerException;
-import org.mycore.mir.handler.MIRFormSubmissionHandlerProvider;
 import org.mycore.mir.handler.MIRFormSubmissionRequest;
 import org.mycore.mir.handler.MIRInboundAttachment;
 
@@ -69,6 +67,8 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     private static final long serialVersionUID = 1L;
 
     private static final Logger LOGGER = LogManager.getLogger();
+
+    private static final String PROPERTY_PREFIX = "MIR.MailerWithFileServlet.";
 
     private static final String CAPTCHA_SESSION_KEY = "mwf_captcha";
     private static final String ACTION_CAPTCHA = "captcha";
@@ -87,7 +87,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         MCRConfiguration2.getString("MCR.Request.CharEncoding").orElse("UTF-8");
 
     private static final Set<String> DISALLOWED_MAIL_DOMAINS =
-        MCRConfiguration2.getOrThrow("MCR.mir-module.DisallowedMailDomains", MCRConfiguration2::splitValue)
+        MCRConfiguration2.getOrThrow(PROPERTY_PREFIX + "DisallowedEmailDomains", MCRConfiguration2::splitValue)
             .collect(Collectors.toSet());
 
     @Override
@@ -154,8 +154,9 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
         MIRFormSubmissionHandler handler;
         try {
-            handler = MIRFormSubmissionHandlerProvider.obtainInstance(action);
-        } catch (MCRConfigurationException e) {
+            handler = MCRConfiguration2.<MIRFormSubmissionHandler>getSingleInstanceOf(
+                PROPERTY_PREFIX + action + ".FormSubmissionHandler.Class").orElseThrow();
+        } catch (Exception e) {
             LOGGER.error("Failed to instantiate form handler for action '{}'", action, e);
             response.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
