@@ -79,7 +79,7 @@ These fields are interpreted and processed specially by the servlet:
 | `mail`     | Sender's email                                     | null    | yes      |
 | `captcha`  | User input used for captcha validation             | null    | yes      |
 | `file`     | Uploaded file                                      | null    | no       |
-| `copy`     | Send a copy to the sender (boolean)                | false   | no       |
+| `copy`     | Send a copy to the sender if ('on' or 'true')      | false   | no       |
 
 ---
 
