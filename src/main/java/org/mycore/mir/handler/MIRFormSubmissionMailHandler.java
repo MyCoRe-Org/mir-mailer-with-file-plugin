@@ -185,7 +185,9 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     }
 
     private boolean resolveSendCopy(Map<String, String> fields) {
-        return Optional.ofNullable(fields.get(FIELD_COPY)).map(Boolean::valueOf).orElse(false);
+        return Optional.ofNullable(fields.get(FIELD_COPY))
+            .map(v -> v.equalsIgnoreCase("true") || v.equalsIgnoreCase("on"))
+            .orElse(false);
     }
 
      /**
