@@ -21,15 +21,19 @@ package org.mycore.mir.handler;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,6 +68,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     private final MIRMailBodyRenderer bodyRenderer;
     private final List<String> requiredFieldNames;
     private final AttachmentConfig attachmentConfig;
+    private final boolean allowCopy;
 
     /**
      * Constructs a MIRFormSubmissionMailHandler.
@@ -77,6 +82,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         this.bodyRenderer = config.bodyRenderer;
         this.requiredFieldNames = config.requiredFieldNames;
         this.attachmentConfig = config.attachmentConfig();
+        this.allowCopy = config.allowCopy();
     }
 
     @Override
@@ -188,19 +194,28 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         if (senderEmail == null || senderEmail.isBlank()) {
             return Optional.empty();
         }
-        final String senderName = fields.get(FIELD_SENDER_NAME);
-        if (senderName != null && !senderName.isBlank()) {
-            final String result = String.format(Locale.ROOT, "%s <%s>", fields.get(FIELD_SENDER_NAME),
-                fields.get(FIELD_SENDER_EMAIL));
-            return Optional.of(result);
+        try {
+            final InternetAddress address = new InternetAddress(senderEmail.trim(), true);
+            address.validate();
+            final String senderName = fields.get(FIELD_SENDER_NAME);
+            if (senderName != null && !senderName.isBlank()) {
+                address.setPersonal(senderName.trim(), StandardCharsets.UTF_8.name());
+            }
+            return Optional.of(address.toString());
+        } catch (AddressException | UnsupportedEncodingException e) {
+            throw new MIRFormSubmissionValidationException(ERROR_MAIL, "Invalid sender address");
         }
-        return Optional.of(fields.get(FIELD_SENDER_EMAIL));
     }
 
     private boolean resolveSendCopy(Map<String, String> fields) {
-        return Optional.ofNullable(fields.get(FIELD_COPY))
+        final boolean copyRequested = Optional.ofNullable(fields.get(FIELD_COPY))
             .map(v -> v.equalsIgnoreCase("true") || v.equalsIgnoreCase("on"))
             .orElse(false);
+        if (copyRequested && !allowCopy) {
+            LOGGER.warn("Copy to sender requested but not allowed, ignoring");
+            return false;
+        }
+        return copyRequested;
     }
 
      /**
@@ -234,9 +249,11 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
      * @param bodyRenderer renderer responsible for creating the email body from the submitted form data
      * @param requiredFieldNames field names that must be present in the form submission
      * @param attachmentConfig attachment config for submission
+     * @param allowCopy whether a copy of the mail may be sent to the form sender
      */
     public record FormSubmissionHandlerConfig(String sender, List<String> recipients, String subject,
-        MIRMailBodyRenderer bodyRenderer, List<String> requiredFieldNames, AttachmentConfig attachmentConfig) {
+        MIRMailBodyRenderer bodyRenderer, List<String> requiredFieldNames, AttachmentConfig attachmentConfig,
+        boolean allowCopy) {
     }
 
     /**
@@ -304,6 +321,12 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         @MCRProperty(name = "Attachment.MaxTotalSize", required = false)
         public String maxTotalSize;
 
+        /**
+         * Whether a copy of the mail may be sent to the form sender, defaults to false.
+         */
+        @MCRProperty(name = "AllowCopy", required = false)
+        public String allowCopy;
+
         @Override
         public MIRFormSubmissionMailHandler get() {
             final List<String> requiredFieldNames =
@@ -312,7 +335,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             final List<String> recipients =
                 Optional.of(recipientsString).stream().flatMap(MCRConfiguration2::splitValue).toList();
             final FormSubmissionHandlerConfig config = new FormSubmissionHandlerConfig(sender, recipients, subject,
-                bodyRenderer, requiredFieldNames, getAttachmentConfig());
+                bodyRenderer, requiredFieldNames, getAttachmentConfig(), Boolean.parseBoolean(allowCopy));
             return new MIRFormSubmissionMailHandler(config);
         }
 
