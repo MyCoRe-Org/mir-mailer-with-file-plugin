@@ -18,7 +18,6 @@
 
 package org.mycore.mir.handler;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
@@ -89,16 +88,19 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     public void handle(MIRFormSubmissionRequest formSubmissionRequest) {
         final Map<String, String> fields = formSubmissionRequest.fields();
         checkFields(fields);
+        final List<MIRInboundAttachment> attachments = formSubmissionRequest.attachments();
+        if (!attachments.isEmpty() && !attachmentConfig.isEnabled()) {
+            throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT, "Attachments are not allowed");
+        }
+        validateAttachments(attachments);
         final List<Path> tempFiles = new ArrayList<>();
+        Path uploadDir = null;
         try {
             final String body = bodyRenderer.render(formSubmissionRequest);
-            if (!formSubmissionRequest.attachments().isEmpty()) {
-                if (attachmentConfig == null || !attachmentConfig.isEnabled()) {
-                    throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT, "Attachments are not allowed");
-                }
-                validateAttachments(formSubmissionRequest.attachments());
-                for (MIRInboundAttachment attachment : formSubmissionRequest.attachments()) {
-                    tempFiles.add(uploadFile(attachmentConfig.uploadPath(), attachment));
+            if (!attachments.isEmpty()) {
+                uploadDir = Files.createTempDirectory(Path.of(attachmentConfig.uploadPath()), "mwf-");
+                for (MIRInboundAttachment attachment : attachments) {
+                    tempFiles.add(uploadFile(uploadDir, attachment));
                 }
             }
             final List<String> parts = tempFiles.stream().map(Path::toUri).map(URI::toString).toList();
@@ -122,13 +124,18 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         } catch (MCRException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: " + e.getMessage(), e);
         } finally {
-            tempFiles.forEach(tempFile -> {
-                try {
-                    Files.deleteIfExists(tempFile);
-                } catch (IOException e) {
-                    LOGGER.warn("Failed to delete temporary file {}", tempFile, e);
-                }
-            });
+            tempFiles.forEach(MIRFormSubmissionMailHandler::deleteQuietly);
+            if (uploadDir != null) {
+                deleteQuietly(uploadDir);
+            }
+        }
+    }
+
+    private static void deleteQuietly(Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to delete temporary file {}", path, e);
         }
     }
 
@@ -161,15 +168,14 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         }
     }
 
-    private Path uploadFile(String uploadPath, MIRInboundAttachment attachment) throws IOException {
-        final Path uploads = new File(uploadPath).toPath();
+    private Path uploadFile(Path uploadDir, MIRInboundAttachment attachment) throws IOException {
         final String filename = attachment.filename();
         if (filename == null || filename.isBlank() || filename.length() > 255) {
             throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT, "Invalid file name");
         }
         final Path tempFile;
         try {
-            tempFile = MCRUtils.safeResolve(uploads, filename);
+            tempFile = MCRUtils.safeResolve(uploadDir, filename);
         } catch (MCRException e) {
             throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT, "Invalid file name");
         }
@@ -236,7 +242,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
           * @return true if attachments are allowed, false otherwise
           */
         public boolean isEnabled() {
-            return maxCount == null || maxCount > 0;
+            return uploadPath != null && (maxCount == null || maxCount > 0);
         }
     }
 

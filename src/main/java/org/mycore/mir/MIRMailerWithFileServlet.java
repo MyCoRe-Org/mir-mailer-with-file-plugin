@@ -171,9 +171,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
             return;
         }
 
-        final List<MIRInboundAttachment> attachments =
-            Optional.ofNullable(request.getPart(PARAM_FILE)).stream().filter(p -> p.getSize() > 0)
-                .map(PartInboundAttachment::new).map(MIRInboundAttachment.class::cast).toList();
+        final List<MIRInboundAttachment> attachments = getAttachments(request);
         try {
             handler.handle(new MIRFormSubmissionRequest(formData.fields, attachments));
             final String successRedirectUrl =
@@ -187,6 +185,18 @@ public class MIRMailerWithFileServlet extends MCRServlet {
             LOGGER.error("Error while sending mail", e);
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private static List<MIRInboundAttachment> getAttachments(HttpServletRequest request)
+        throws IOException, ServletException {
+        final String contentType = request.getContentType();
+        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("multipart/")) {
+            return List.of();
+        }
+        return request.getParts().stream()
+            .filter(p -> PARAM_FILE.equals(p.getName()) && p.getSize() > 0)
+            .<MIRInboundAttachment>map(PartInboundAttachment::new)
+            .toList();
     }
 
     private static boolean isDisallowedSender(String email) {
