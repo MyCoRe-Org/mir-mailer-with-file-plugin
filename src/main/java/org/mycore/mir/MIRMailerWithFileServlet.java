@@ -52,6 +52,7 @@ import org.mycore.frontend.servlets.MCRServletJob;
 import org.mycore.mir.handler.MIRFormSubmissionHandler;
 import org.mycore.mir.handler.MIRFormSubmissionHandlerException;
 import org.mycore.mir.handler.MIRFormSubmissionRequest;
+import org.mycore.mir.handler.MIRFormSubmissionValidationException;
 import org.mycore.mir.handler.MIRInboundAttachment;
 
 import net.logicsquad.nanocaptcha.audio.AudioCaptcha;
@@ -80,6 +81,9 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     private static final String PARAM_SENDER_NAME = "name";
     private static final String PARAM_SENDER_EMAIL = "mail";
     private static final String PARAM_ACTION = "action";
+
+    private static final String ERROR_CAPTCHA = "captcha";
+    private static final String ERROR_MAIL = "mail";
 
     private static final Set<String> SENSITIVE_PARAMS = Set.of(PARAM_CAPTCHA, PARAM_ACTION);
 
@@ -146,12 +150,14 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         }
 
         final String senderEmail = formData.senderEmail();
-        if (senderEmail == null) {
+        if (senderEmail == null || senderEmail.isBlank()) {
             LOGGER.error(() -> "'mail' parameter is required");
-            response.sendRedirect(getDefaultRedirectUrl(request));
+            redirectWithError(request, response, formData, ERROR_MAIL);
             return;
         }
-        if (!validateSender(senderEmail, request, response)) {
+        if (isDisallowedSender(senderEmail)) {
+            LOGGER.error("Will not send e-mail, disallowed senderEmail domain: {}", senderEmail);
+            redirectWithError(request, response, formData, ERROR_MAIL);
             return;
         }
 
@@ -174,21 +180,18 @@ public class MIRMailerWithFileServlet extends MCRServlet {
                 Optional.ofNullable(request.getParameter("redirect")).filter(MCRFrontendUtil::isSafeRedirect)
                     .orElse(getDefaultRedirectUrl(request));
             response.sendRedirect(response.encodeRedirectURL(successRedirectUrl));
+        } catch (MIRFormSubmissionValidationException e) {
+            LOGGER.warn("Invalid form submission for action '{}': {}", action, e.getMessage());
+            redirectWithError(request, response, formData, e.getErrorCode());
         } catch (MIRFormSubmissionHandlerException e) {
             LOGGER.error("Error while sending mail", e);
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
 
-    private boolean validateSender(String email, HttpServletRequest request, HttpServletResponse response)
-        throws IOException {
+    private static boolean isDisallowedSender(String email) {
         final String emailLowerCase = "@" + email.toLowerCase(Locale.ROOT);
-        if (DISALLOWED_MAIL_DOMAINS.stream().anyMatch(emailLowerCase::endsWith)) {
-            LOGGER.error("Will not send e-mail, disallowed senderEmail domain: {}", email);
-            response.sendRedirect(getDefaultRedirectUrl(request));
-            return false;
-        }
-        return true;
+        return DISALLOWED_MAIL_DOMAINS.stream().anyMatch(emailLowerCase::endsWith);
     }
 
     private boolean validateCaptcha(HttpServletRequest request, HttpServletResponse response, FormData formData)
@@ -197,7 +200,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         if (captcha == null || !checkCaptcha(request, captcha)) {
             clearCaptcha(request);
             LOGGER.debug("Invalid captcha");
-            redirectWithCaptchaError(request, response, formData);
+            redirectWithError(request, response, formData, ERROR_CAPTCHA);
             return false;
         }
         clearCaptcha(request);
@@ -212,12 +215,13 @@ public class MIRMailerWithFileServlet extends MCRServlet {
             .orElse(false);
     }
 
-    private void redirectWithCaptchaError(HttpServletRequest request, HttpServletResponse response,
-        FormData formData) throws IOException {
+    private void redirectWithError(HttpServletRequest request, HttpServletResponse response, FormData formData,
+        String errorCode) throws IOException {
         final String referer = getSafeReferer(request);
         final String separator = referer.contains("?") ? "&" : "?";
-        final String url =
-            referer + separator + "error=captcha" + MIRMailerWithFileServletHelper.getUrlParams(formData.fields);
+        final String url = referer + separator + "error="
+            + MIRMailerWithFileServletHelper.encodeUriComponent(errorCode)
+            + MIRMailerWithFileServletHelper.getUrlParams(formData.fields);
         response.sendRedirect(url);
     }
 

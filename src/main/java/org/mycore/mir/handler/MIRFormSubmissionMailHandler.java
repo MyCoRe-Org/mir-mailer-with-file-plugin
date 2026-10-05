@@ -54,6 +54,10 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     private static final String FIELD_SENDER_EMAIL = "mail";
     private static final String FIELD_COPY = "copy";
 
+    private static final String ERROR_FIELD = "field";
+    private static final String ERROR_MAIL = "mail";
+    private static final String ERROR_ATTACHMENT = "attachment";
+
     private final String sender;
     private final List<String> recipients;
     private final String subject;
@@ -84,7 +88,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             final String body = bodyRenderer.render(formSubmissionRequest);
             if (!formSubmissionRequest.attachments().isEmpty()) {
                 if (attachmentConfig == null || !attachmentConfig.isEnabled()) {
-                    throw new MIRFormSubmissionHandlerException("Attachments are not allowed");
+                    throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT, "Attachments are not allowed");
                 }
                 validateAttachments(formSubmissionRequest.attachments());
                 for (MIRInboundAttachment attachment : formSubmissionRequest.attachments()) {
@@ -95,7 +99,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             final Optional<String> optFormSender = resolveFormSender(fields);
             final boolean sendCopy = resolveSendCopy(fields);
             if (sendCopy && optFormSender.isEmpty()) {
-                throw new MIRFormSubmissionHandlerException("No sender found, check form");
+                throw new MIRFormSubmissionValidationException(ERROR_MAIL, "No sender found, check form");
             }
             if (optFormSender.isPresent()) {
                 MCRMailer.send(sender, List.of(optFormSender.get()), recipients, null, subject, body, parts);
@@ -107,6 +111,8 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             }
         } catch (IOException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: error handling attachments", e);
+        } catch (MIRFormSubmissionHandlerException e) {
+            throw e;
         } catch (MCRException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: " + e.getMessage(), e);
         } finally {
@@ -123,11 +129,13 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     private void validateAttachments(List<MIRInboundAttachment> attachments) {
         final Integer minCount = attachmentConfig.minCount;
         if (minCount != null && attachments.size() < minCount) {
-            throw new MIRFormSubmissionHandlerException("Not enough attachments: min allowed is " + minCount);
+            throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT,
+                "Not enough attachments: min allowed is " + minCount);
         }
         final Integer maxCount = attachmentConfig.maxCount();
         if (maxCount != null && attachments.size() > maxCount) {
-            throw new MIRFormSubmissionHandlerException("Too many attachments: max allowed is " + maxCount);
+            throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT,
+                "Too many attachments: max allowed is " + maxCount);
         }
         long totalSize = 0;
         final Long maxFileSize = attachmentConfig.maxFileSize();
@@ -135,14 +143,14 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         for (MIRInboundAttachment attachment : attachments) {
             final long size = attachment.size();
             if (maxFileSize != null && size > maxFileSize) {
-                throw new MIRFormSubmissionHandlerException(
+                throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT,
                     "Attachment " + attachment.filename() + " exceeds max file size of " + maxFileSize + " bytes"
                 );
             }
             totalSize += size;
         }
         if (maxTotalSize != null && totalSize > maxTotalSize) {
-            throw new MIRFormSubmissionHandlerException(
+            throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT,
                 "Total attachment size exceeds max allowed of " + maxTotalSize + " bytes");
         }
     }
@@ -150,10 +158,15 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     private Path uploadFile(String uploadPath, MIRInboundAttachment attachment) throws IOException {
         final Path uploads = new File(uploadPath).toPath();
         final String filename = attachment.filename();
-        if (filename.isBlank() || filename.length() > 255) {
-            throw new IllegalArgumentException("Invalid file name");
+        if (filename == null || filename.isBlank() || filename.length() > 255) {
+            throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT, "Invalid file name");
         }
-        final Path tempFile = MCRUtils.safeResolve(uploads, filename);
+        final Path tempFile;
+        try {
+            tempFile = MCRUtils.safeResolve(uploads, filename);
+        } catch (MCRException e) {
+            throw new MIRFormSubmissionValidationException(ERROR_ATTACHMENT, "Invalid file name");
+        }
         LOGGER.debug("Uploading file {} to {}", filename, tempFile);
         try (InputStream fileContent = attachment.openStream()) {
             Files.copy(fileContent, tempFile);
@@ -165,7 +178,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         for (String name : requiredFieldNames) {
             String value = fields.get(name);
             if (value == null || value.isBlank()) {
-                throw new MIRFormSubmissionHandlerException("Missing required field: " + name);
+                throw new MIRFormSubmissionValidationException(ERROR_FIELD, "Missing required field: " + name);
             }
         }
     }
