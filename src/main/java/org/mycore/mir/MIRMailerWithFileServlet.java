@@ -41,6 +41,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.Part;
 
 import org.apache.logging.log4j.LogManager;
@@ -124,9 +125,12 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     private void handleCaptchaPlayRequest(MCRServletJob job) throws IOException {
         LOGGER.debug(() -> "Handling captcha play request...");
-        final String captchaText =
-            Optional.ofNullable(job.getRequest().getSession().getAttribute(CAPTCHA_SESSION_KEY)).map(Object::toString)
-                .orElseGet(MIRCaptchaHelper::generateCaptchaText);
+        final HttpSession session = job.getRequest().getSession();
+        String captchaText = (String) session.getAttribute(CAPTCHA_SESSION_KEY);
+        if (captchaText == null) {
+            captchaText = MIRCaptchaHelper.generateCaptchaText();
+            session.setAttribute(CAPTCHA_SESSION_KEY, captchaText);
+        }
         final AudioCaptcha audioCaptcha = MIRCaptchaHelper.createAudioCaptcha(captchaText);
         job.getResponse().setContentType("audio/wav");
         try (OutputStream out = job.getResponse().getOutputStream();
@@ -200,8 +204,8 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     }
 
     private static boolean isDisallowedSender(String email) {
-        final String emailLowerCase = "@" + email.toLowerCase(Locale.ROOT);
-        return DISALLOWED_MAIL_DOMAINS.stream().anyMatch(emailLowerCase::endsWith);
+        final String domain = email.substring(email.lastIndexOf('@') + 1).trim().toLowerCase(Locale.ROOT);
+        return DISALLOWED_MAIL_DOMAINS.stream().anyMatch(d -> domain.equals(d) || domain.endsWith("." + d));
     }
 
     private boolean validateCaptcha(HttpServletRequest request, HttpServletResponse response, FormData formData)

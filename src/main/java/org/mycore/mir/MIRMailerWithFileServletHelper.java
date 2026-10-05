@@ -22,7 +22,9 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import java.net.URLEncoder;
 import java.util.Enumeration;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -30,6 +32,8 @@ import jakarta.servlet.http.HttpServletRequest;
  * Utility class for handling MIR mailer servlet requests and form data.
  */
 public final class MIRMailerWithFileServletHelper {
+
+    private static final Set<String> SENSITIVE_HEADERS = Set.of("cookie", "authorization");
 
     private MIRMailerWithFileServletHelper() {}
 
@@ -84,7 +88,9 @@ public final class MIRMailerWithFileServletHelper {
         final Enumeration<String> headerNames = request.getHeaderNames();
         while (headerNames.hasMoreElements()) {
             final String header = headerNames.nextElement();
-            logMessage.append("\n  ").append(header).append(": ").append(request.getHeader(header));
+            final String value =
+                SENSITIVE_HEADERS.contains(header.toLowerCase(Locale.ROOT)) ? "***" : request.getHeader(header);
+            logMessage.append("\n  ").append(header).append(": ").append(value);
         }
 
         logMessage.append("\nParameters:");
