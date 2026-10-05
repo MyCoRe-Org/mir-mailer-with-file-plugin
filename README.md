@@ -42,6 +42,8 @@ MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.BodyRenderer.Clas
 MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.BodyRenderer.TemplatePath=/submit_request_template.txt
 # Mail subject
 MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.Subject=[PublicationServer] - Online Submission
+# Allow sending a copy to the form sender if the form field 'copy' is 'true' or 'on' (optional, default: false)
+#MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.AllowCopy=false
 # Comma seperated extra required field names (optional)
 MIR.MailerWithFileServlet.submit_request.FormSubmissionHandler.RequiredFieldNames=
 # Attachment upload path
