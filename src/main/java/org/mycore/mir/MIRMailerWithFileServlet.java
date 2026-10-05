@@ -41,6 +41,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.Part;
 
 import org.apache.logging.log4j.LogManager;
@@ -52,6 +53,7 @@ import org.mycore.frontend.servlets.MCRServletJob;
 import org.mycore.mir.handler.MIRFormSubmissionHandler;
 import org.mycore.mir.handler.MIRFormSubmissionHandlerException;
 import org.mycore.mir.handler.MIRFormSubmissionRequest;
+import org.mycore.mir.handler.MIRFormSubmissionValidationException;
 import org.mycore.mir.handler.MIRInboundAttachment;
 
 import net.logicsquad.nanocaptcha.audio.AudioCaptcha;
@@ -80,6 +82,9 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     private static final String PARAM_SENDER_NAME = "name";
     private static final String PARAM_SENDER_EMAIL = "mail";
     private static final String PARAM_ACTION = "action";
+
+    private static final String ERROR_CAPTCHA = "captcha";
+    private static final String ERROR_MAIL = "mail";
 
     private static final Set<String> SENSITIVE_PARAMS = Set.of(PARAM_CAPTCHA, PARAM_ACTION);
 
@@ -120,9 +125,12 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     private void handleCaptchaPlayRequest(MCRServletJob job) throws IOException {
         LOGGER.debug(() -> "Handling captcha play request...");
-        final String captchaText =
-            Optional.ofNullable(job.getRequest().getSession().getAttribute(CAPTCHA_SESSION_KEY)).map(Object::toString)
-                .orElseGet(MIRCaptchaHelper::generateCaptchaText);
+        final HttpSession session = job.getRequest().getSession();
+        String captchaText = (String) session.getAttribute(CAPTCHA_SESSION_KEY);
+        if (captchaText == null) {
+            captchaText = MIRCaptchaHelper.generateCaptchaText();
+            session.setAttribute(CAPTCHA_SESSION_KEY, captchaText);
+        }
         final AudioCaptcha audioCaptcha = MIRCaptchaHelper.createAudioCaptcha(captchaText);
         job.getResponse().setContentType("audio/wav");
         try (OutputStream out = job.getResponse().getOutputStream();
@@ -139,19 +147,21 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         final FormData formData = FormData.ofRequest(request);
 
         final boolean requiresCaptcha =
-            MCRConfiguration2.getBoolean(PROPERTY_PREFIX + action + "CaptchaRequired").orElse(false);
+            MCRConfiguration2.getBoolean(PROPERTY_PREFIX + action + ".CaptchaRequired").orElse(false);
 
         if (requiresCaptcha && !validateCaptcha(request, response, formData)) {
             return;
         }
 
         final String senderEmail = formData.senderEmail();
-        if (senderEmail == null) {
+        if (senderEmail == null || senderEmail.isBlank()) {
             LOGGER.error(() -> "'mail' parameter is required");
-            response.sendRedirect(getDefaultRedirectUrl(request));
+            redirectWithError(request, response, formData, ERROR_MAIL);
             return;
         }
-        if (!validateSender(senderEmail, request, response)) {
+        if (isDisallowedSender(senderEmail)) {
+            LOGGER.error("Will not send e-mail, disallowed senderEmail domain: {}", senderEmail);
+            redirectWithError(request, response, formData, ERROR_MAIL);
             return;
         }
 
@@ -165,30 +175,39 @@ public class MIRMailerWithFileServlet extends MCRServlet {
             return;
         }
 
-        final List<MIRInboundAttachment> attachments =
-            Optional.ofNullable(request.getPart(PARAM_FILE)).stream().filter(p -> p.getSize() > 0)
-                .map(PartInboundAttachment::new).map(MIRInboundAttachment.class::cast).toList();
+        final List<MIRInboundAttachment> attachments = getAttachments(request);
         try {
             handler.handle(new MIRFormSubmissionRequest(formData.fields, attachments));
             final String successRedirectUrl =
                 Optional.ofNullable(request.getParameter("redirect")).filter(MCRFrontendUtil::isSafeRedirect)
                     .orElse(getDefaultRedirectUrl(request));
             response.sendRedirect(response.encodeRedirectURL(successRedirectUrl));
+        } catch (MIRFormSubmissionValidationException e) {
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Invalid form submission for action '{}': {}", action, e.getMessage());
+            }
+            redirectWithError(request, response, formData, e.getErrorCode());
         } catch (MIRFormSubmissionHandlerException e) {
             LOGGER.error("Error while sending mail", e);
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
 
-    private boolean validateSender(String email, HttpServletRequest request, HttpServletResponse response)
-        throws IOException {
-        final String emailLowerCase = "@" + email.toLowerCase(Locale.ROOT);
-        if (DISALLOWED_MAIL_DOMAINS.stream().anyMatch(emailLowerCase::endsWith)) {
-            LOGGER.error("Will not send e-mail, disallowed senderEmail domain: {}", email);
-            response.sendRedirect(getDefaultRedirectUrl(request));
-            return false;
+    private static List<MIRInboundAttachment> getAttachments(HttpServletRequest request)
+        throws IOException, ServletException {
+        final String contentType = request.getContentType();
+        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("multipart/")) {
+            return List.of();
         }
-        return true;
+        return request.getParts().stream()
+            .filter(p -> PARAM_FILE.equals(p.getName()) && p.getSize() > 0)
+            .<MIRInboundAttachment>map(PartInboundAttachment::new)
+            .toList();
+    }
+
+    private static boolean isDisallowedSender(String email) {
+        final String domain = email.substring(email.lastIndexOf('@') + 1).trim().toLowerCase(Locale.ROOT);
+        return DISALLOWED_MAIL_DOMAINS.stream().anyMatch(d -> domain.equals(d) || domain.endsWith("." + d));
     }
 
     private boolean validateCaptcha(HttpServletRequest request, HttpServletResponse response, FormData formData)
@@ -197,7 +216,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         if (captcha == null || !checkCaptcha(request, captcha)) {
             clearCaptcha(request);
             LOGGER.debug("Invalid captcha");
-            redirectWithCaptchaError(request, response, formData);
+            redirectWithError(request, response, formData, ERROR_CAPTCHA);
             return false;
         }
         clearCaptcha(request);
@@ -212,12 +231,13 @@ public class MIRMailerWithFileServlet extends MCRServlet {
             .orElse(false);
     }
 
-    private void redirectWithCaptchaError(HttpServletRequest request, HttpServletResponse response,
-        FormData formData) throws IOException {
+    private void redirectWithError(HttpServletRequest request, HttpServletResponse response, FormData formData,
+        String errorCode) throws IOException {
         final String referer = getSafeReferer(request);
         final String separator = referer.contains("?") ? "&" : "?";
-        final String url =
-            referer + separator + "error=captcha" + MIRMailerWithFileServletHelper.getUrlParams(formData.fields);
+        final String url = referer + separator + "error="
+            + MIRMailerWithFileServletHelper.encodeUriComponent(errorCode)
+            + MIRMailerWithFileServletHelper.getUrlParams(formData.fields);
         response.sendRedirect(url);
     }
 
