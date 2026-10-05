@@ -139,7 +139,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         final FormData formData = FormData.ofRequest(request);
 
         final boolean requiresCaptcha =
-            MCRConfiguration2.getBoolean(PROPERTY_PREFIX + action + "CaptchaRequired").orElse(false);
+            MCRConfiguration2.getBoolean(PROPERTY_PREFIX + action + ".CaptchaRequired").orElse(false);
 
         if (requiresCaptcha && !validateCaptcha(request, response, formData)) {
             return;
