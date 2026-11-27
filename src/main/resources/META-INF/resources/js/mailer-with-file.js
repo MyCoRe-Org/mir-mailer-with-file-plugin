@@ -23,7 +23,7 @@ window.addEventListener('load', function () {
     const inputs = document.querySelectorAll(`[name="${CSS.escape(key)}"]`);
     inputs.forEach(input => {
       if (input.type === 'checkbox' || input.type === 'radio') {
-        input.checked = input.value === value;
+        input.checked = value.split(',').includes(input.value);
       } else if (input.type !== 'file') {
         input.value = value;
       }
