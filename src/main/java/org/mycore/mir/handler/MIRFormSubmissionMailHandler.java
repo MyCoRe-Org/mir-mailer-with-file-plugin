@@ -68,6 +68,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     private final List<String> requiredFieldNames;
     private final AttachmentConfig attachmentConfig;
     private final boolean allowCopy;
+    private final MailTransport mailTransport;
 
     /**
      * Constructs a MIRFormSubmissionMailHandler.
@@ -75,6 +76,11 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
      * @param config the config
      */
     public MIRFormSubmissionMailHandler(FormSubmissionHandlerConfig config) {
+        this(config, MIRFormSubmissionMailHandler::sendWithMailer);
+    }
+
+    MIRFormSubmissionMailHandler(FormSubmissionHandlerConfig config, MailTransport mailTransport) {
+        this.mailTransport = mailTransport;
         this.sender = config.sender;
         this.recipients = config.recipients();
         this.subject = config.subject;
@@ -96,7 +102,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         final List<Path> tempFiles = new ArrayList<>();
         Path uploadDir = null;
         try {
-            final String body = bodyRenderer.render(formSubmissionRequest);
+            final String body = renderBody(formSubmissionRequest);
             if (!attachments.isEmpty()) {
                 final Path uploadBase = Files.createDirectories(Path.of(attachmentConfig.uploadPath()));
                 uploadDir = Files.createTempDirectory(uploadBase, "mwf-");
@@ -111,12 +117,12 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
                 throw new MIRFormSubmissionValidationException(ERROR_MAIL, "No sender found, check form");
             }
             if (optFormSender.isPresent()) {
-                sendMail(List.of(optFormSender.get()), recipients, body, parts);
+                sendMail(new OutgoingMail(sender, List.of(optFormSender.get()), recipients, subject, body, parts));
                 if (sendCopy) {
-                    sendMail(null, List.of(optFormSender.get()), body, List.of());
+                    sendCopy(new OutgoingMail(sender, null, List.of(optFormSender.get()), subject, body, List.of()));
                 }
             } else {
-                sendMail(null, recipients, body, parts);
+                sendMail(new OutgoingMail(sender, null, recipients, subject, body, parts));
             }
         } catch (IOException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: error handling attachments", e);
@@ -128,19 +134,63 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         }
     }
 
-    private void sendMail(List<String> replyTo, List<String> to, String body, List<String> parts) {
-        final MCRMailer.EMail mail = new MCRMailer.EMail();
-        mail.from = sender;
-        mail.replyTo = replyTo;
-        mail.to = to;
-        mail.subject = subject;
-        mail.msgParts = List.of(new MCRMailer.EMail.MessagePart(body));
-        mail.parts = parts;
+    private String renderBody(MIRFormSubmissionRequest formSubmissionRequest) {
         try {
-            MCRMailer.send(mail.toXML().getRootElement(), true);
+            return bodyRenderer.render(formSubmissionRequest);
+        } catch (MIRFormSubmissionHandlerException e) {
+            throw e;
+        } catch (MCRException e) {
+            throw new MIRFormSubmissionHandlerException("Failed to render mail body: " + e.getMessage(), e);
+        }
+    }
+
+    private void sendMail(OutgoingMail mail) {
+        try {
+            mailTransport.send(mail);
         } catch (Exception e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: " + e.getMessage(), e);
         }
+    }
+
+    private void sendCopy(OutgoingMail mail) {
+        try {
+            mailTransport.send(mail);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to send copy to {}", mail.to(), e);
+        }
+    }
+
+    private static void sendWithMailer(OutgoingMail outgoingMail) throws Exception {
+        final MCRMailer.EMail mail = new MCRMailer.EMail();
+        mail.from = outgoingMail.from();
+        mail.replyTo = outgoingMail.replyTo();
+        mail.to = outgoingMail.to();
+        mail.subject = outgoingMail.subject();
+        mail.msgParts = List.of(new MCRMailer.EMail.MessagePart(outgoingMail.body()));
+        mail.parts = outgoingMail.parts();
+        MCRMailer.send(mail.toXML().getRootElement(), true);
+    }
+
+    /**
+     * A mail to be sent by a {@link MailTransport}.
+     *
+     * @param from the sender
+     * @param replyTo the reply-to addresses, may be null
+     * @param to the recipients
+     * @param subject the subject
+     * @param body the body
+     * @param parts URIs of files to attach
+     */
+    record OutgoingMail(String from, List<String> replyTo, List<String> to, String subject, String body,
+        List<String> parts) {
+    }
+
+    /**
+     * Sends an {@link OutgoingMail} and throws an exception if sending fails.
+     */
+    @FunctionalInterface
+    interface MailTransport {
+        void send(OutgoingMail mail) throws Exception;
     }
 
     private static void deleteQuietly(Path path) {

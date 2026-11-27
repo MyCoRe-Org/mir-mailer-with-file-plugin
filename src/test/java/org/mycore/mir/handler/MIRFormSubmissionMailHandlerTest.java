@@ -21,8 +21,12 @@ package org.mycore.mir.handler;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -64,6 +68,68 @@ class MIRFormSubmissionMailHandlerTest {
         List<MIRInboundAttachment> attachments) {
         return assertThrows(MIRFormSubmissionValidationException.class,
             () -> handler.handle(new MIRFormSubmissionRequest(fields, attachments))).getErrorCode();
+    }
+
+    private static MIRFormSubmissionMailHandler handler(boolean allowCopy, MIRMailBodyRenderer renderer,
+        MIRFormSubmissionMailHandler.MailTransport transport) {
+        return new MIRFormSubmissionMailHandler(new MIRFormSubmissionMailHandler.FormSubmissionHandlerConfig(
+            "sender@example.org", List.of("recipient@example.org"), "Subject", renderer, List.of(),
+            noAttachments(), allowCopy), transport);
+    }
+
+    @Test
+    void mailIsSentToRecipientsWithSenderAsReplyTo() {
+        final List<MIRFormSubmissionMailHandler.OutgoingMail> sent = new ArrayList<>();
+        handler(false, request -> "body", sent::add).handle(
+            new MIRFormSubmissionRequest(Map.of("name", "Jane", "mail", "jane@example.org"), List.of()));
+        assertEquals(1, sent.size());
+        assertEquals(List.of("recipient@example.org"), sent.get(0).to());
+        assertEquals(List.of("Jane <jane@example.org>"), sent.get(0).replyTo());
+        assertEquals("body", sent.get(0).body());
+    }
+
+    @Test
+    void copyIsSentToSender() {
+        final List<MIRFormSubmissionMailHandler.OutgoingMail> sent = new ArrayList<>();
+        handler(true, request -> "body", sent::add).handle(
+            new MIRFormSubmissionRequest(Map.of("mail", "jane@example.org", "copy", "on"), List.of()));
+        assertEquals(2, sent.size());
+        assertEquals(List.of("jane@example.org"), sent.get(1).to());
+    }
+
+    @Test
+    void failedCopyDoesNotFailSubmission() {
+        final List<MIRFormSubmissionMailHandler.OutgoingMail> sent = new ArrayList<>();
+        final MIRFormSubmissionMailHandler handler = handler(true, request -> "body", mail -> {
+            if (mail.to().contains("jane@example.org")) {
+                throw new IllegalStateException("rejected");
+            }
+            sent.add(mail);
+        });
+        assertDoesNotThrow(() -> handler.handle(
+            new MIRFormSubmissionRequest(Map.of("mail", "jane@example.org", "copy", "on"), List.of())));
+        assertEquals(1, sent.size());
+    }
+
+    @Test
+    void failedMailFailsSubmission() {
+        final MIRFormSubmissionMailHandler handler = handler(false, request -> "body", mail -> {
+            throw new IllegalStateException("smtp down");
+        });
+        final MIRFormSubmissionHandlerException e = assertThrows(MIRFormSubmissionHandlerException.class,
+            () -> handler.handle(new MIRFormSubmissionRequest(Map.of("mail", "jane@example.org"), List.of())));
+        assertFalse(e instanceof MIRFormSubmissionValidationException);
+    }
+
+    @Test
+    void renderingErrorIsReportedAsHandlerException() {
+        final MIRFormSubmissionMailHandler handler = handler(false, request -> {
+            throw new MIRMailBodyRenderingException("broken template");
+        }, mail -> {
+        });
+        final MIRFormSubmissionHandlerException e = assertThrows(MIRFormSubmissionHandlerException.class,
+            () -> handler.handle(new MIRFormSubmissionRequest(Map.of("mail", "jane@example.org"), List.of())));
+        assertEquals(MIRMailBodyRenderingException.class, e.getCause().getClass());
     }
 
     @Test
