@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 import jakarta.mail.internet.AddressException;
@@ -76,7 +77,8 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
      * @param config the config
      */
     public MIRFormSubmissionMailHandler(FormSubmissionHandlerConfig config) {
-        this(config, MIRFormSubmissionMailHandler::sendWithMailer);
+        this(config, skipIfMailDisabled(() -> MCRConfiguration2.getInt("MCR.Mail.NumTries").orElse(1),
+            MIRFormSubmissionMailHandler::sendWithMailer));
     }
 
     MIRFormSubmissionMailHandler(FormSubmissionHandlerConfig config, MailTransport mailTransport) {
@@ -116,13 +118,17 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             if (sendCopy && optFormSender.isEmpty()) {
                 throw new MIRFormSubmissionValidationException(ERROR_MAIL, "No sender found, check form");
             }
+            final String mailSubject = stripInvalidXmlChars(subject);
+            final String mailBody = stripInvalidXmlChars(body);
             if (optFormSender.isPresent()) {
-                sendMail(new OutgoingMail(sender, List.of(optFormSender.get()), recipients, subject, body, parts));
+                sendMail(new OutgoingMail(sender, List.of(optFormSender.get()), recipients, mailSubject, mailBody,
+                    parts));
                 if (sendCopy) {
-                    sendCopy(new OutgoingMail(sender, null, List.of(optFormSender.get()), subject, body, List.of()));
+                    sendCopy(new OutgoingMail(sender, null, List.of(optFormSender.get()), mailSubject, mailBody,
+                        List.of()));
                 }
             } else {
-                sendMail(new OutgoingMail(sender, null, recipients, subject, body, parts));
+                sendMail(new OutgoingMail(sender, null, recipients, mailSubject, mailBody, parts));
             }
         } catch (IOException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: error handling attachments", e);
@@ -158,6 +164,30 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         } catch (Exception e) {
             LOGGER.warn("Failed to send copy to {}", mail.to(), e);
         }
+    }
+
+    static String stripInvalidXmlChars(String value) {
+        if (value == null) {
+            return null;
+        }
+        final StringBuilder sb = new StringBuilder(value.length());
+        value.codePoints().filter(MIRFormSubmissionMailHandler::isValidXmlChar).forEach(sb::appendCodePoint);
+        return sb.toString();
+    }
+
+    private static boolean isValidXmlChar(int c) {
+        return c == 0x9 || c == 0xA || c == 0xD || c >= 0x20 && c <= 0xD7FF || c >= 0xE000 && c <= 0xFFFD
+            || c >= 0x10000 && c <= 0x10FFFF;
+    }
+
+    static MailTransport skipIfMailDisabled(IntSupplier numTries, MailTransport transport) {
+        return mail -> {
+            if (numTries.getAsInt() <= 0) {
+                LOGGER.info("Mail is disabled by MCR.Mail.NumTries, not sending mail to {}", mail.to());
+                return;
+            }
+            transport.send(mail);
+        };
     }
 
     private static void sendWithMailer(OutgoingMail outgoingMail) throws Exception {
@@ -267,7 +297,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             address.validate();
             final String senderName = fields.get(FIELD_SENDER_NAME);
             if (senderName != null && !senderName.isBlank()) {
-                address.setPersonal(senderName.trim(), StandardCharsets.UTF_8.name());
+                address.setPersonal(stripInvalidXmlChars(senderName.trim()), StandardCharsets.UTF_8.name());
             }
             return Optional.of(address.toString());
         } catch (AddressException | UnsupportedEncodingException e) {

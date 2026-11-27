@@ -133,6 +133,32 @@ class MIRFormSubmissionMailHandlerTest {
     }
 
     @Test
+    void invalidXmlCharactersAreRemovedFromMail() {
+        final List<MIRFormSubmissionMailHandler.OutgoingMail> sent = new ArrayList<>();
+        handler(false, request -> "line\u000Bbreak\ttab\nnew", sent::add).handle(
+            new MIRFormSubmissionRequest(Map.of("name", "Ja\u0001ne", "mail", "jane@example.org"), List.of()));
+        assertEquals("linebreak\ttab\nnew", sent.get(0).body());
+        assertEquals(List.of("Jane <jane@example.org>"), sent.get(0).replyTo());
+    }
+
+    @Test
+    void stripInvalidXmlCharsKeepsValidCharacters() {
+        assertEquals("a\tb\nc\rd \u00E4\uD83D\uDE00",
+            MIRFormSubmissionMailHandler.stripInvalidXmlChars("a\tb\nc\rd \u00E4\uD83D\uDE00\u0000\uFFFE"));
+    }
+
+    @Test
+    void mailIsSkippedWhenDisabled() throws Exception {
+        final List<MIRFormSubmissionMailHandler.OutgoingMail> sent = new ArrayList<>();
+        final MIRFormSubmissionMailHandler.OutgoingMail mail = new MIRFormSubmissionMailHandler.OutgoingMail(
+            "sender@example.org", null, List.of("recipient@example.org"), "Subject", "body", List.of());
+        MIRFormSubmissionMailHandler.skipIfMailDisabled(() -> 0, sent::add).send(mail);
+        assertEquals(0, sent.size());
+        MIRFormSubmissionMailHandler.skipIfMailDisabled(() -> 1, sent::add).send(mail);
+        assertEquals(1, sent.size());
+    }
+
+    @Test
     void missingRequiredFieldIsRejected() {
         assertEquals("field", errorCode(handler(List.of("name"), noAttachments(), false),
             Map.of("mail", "jane@example.org"), List.of()));
