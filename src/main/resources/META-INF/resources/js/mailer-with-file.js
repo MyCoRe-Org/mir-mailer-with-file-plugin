@@ -19,11 +19,22 @@
 window.addEventListener('load', function () {
   // apply url parameters to form
   const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('error')) {
+    document.querySelectorAll('form input[type="checkbox"], form input[type="radio"]').forEach(input => {
+      if (input.name && !urlParams.has(input.name)) {
+        input.checked = false;
+      }
+    });
+  }
   for (const [key, value] of urlParams) {
-    const input = document.querySelector(`[name="${key}"]`);
-    if (input) {
-      input.value = value;
-    }
+    const inputs = document.querySelectorAll(`[name="${CSS.escape(key)}"]`);
+    inputs.forEach(input => {
+      if (input.type === 'checkbox' || input.type === 'radio') {
+        input.checked = value.split(',').includes(input.value);
+      } else if (input.type !== 'file') {
+        input.value = value;
+      }
+    });
   }
 
   // Fetch all the forms we want to apply custom Bootstrap validation styles to

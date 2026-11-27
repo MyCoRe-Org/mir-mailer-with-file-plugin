@@ -23,6 +23,10 @@ window.addEventListener('load', () => {
   let captchaPlay = document.getElementById('captcha-play');
   let captchaStop = document.getElementById('captcha-stop');
 
+  if (!captchaInput || !captchaImage) {
+    return;
+  }
+
   let audio = null;
   // check if error=capcha is in the URL
   let url = new URL(window.location.href);
@@ -36,7 +40,7 @@ window.addEventListener('load', () => {
     captchaInput.classList.remove('is-invalid');
   });
 
-  captchaRefresh.addEventListener('click', function (e) {
+  captchaRefresh?.addEventListener('click', function (e) {
     e.preventDefault();
     captchaImage.src = captchaImage.src + '&rng=' + Math.random();
   });
@@ -48,7 +52,10 @@ window.addEventListener('load', () => {
       audio.currentTime = 0;
     }
 
-    audio = new Audio(window.webApplicationBaseURL + '/servlets/MIRMailerWithFile?action=captcha-play&rng=' + Math.random());
+    const audioUrl = new URL(captchaImage.getAttribute('src'), document.baseURI);
+    audioUrl.searchParams.set('action', 'captcha-play');
+    audioUrl.searchParams.set('rng', Math.random().toString());
+    audio = new Audio(audioUrl.toString());
 
     audio.play();
     captchaPlay?.classList.add('d-none');

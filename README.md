@@ -21,6 +21,20 @@ configurable form submission handlers.
 ### Required Properties
 - **`MIR.MailerWithFileServlet.DisallowedEmailDomains`**  
   A list of blocked sender domains.
+
+### Optional Properties
+- **`MIR.MailerWithFileServlet.MaxFileSize`**  
+  Maximum size in bytes of a single uploaded file, `-1` (default) means unlimited.
+- **`MIR.MailerWithFileServlet.MaxRequestSize`**  
+  Maximum size in bytes of a whole request including all files, `-1` (default) means unlimited.
+
+The container rejects requests exceeding these limits before the form is processed and the user is redirected to
+the form with `error=attachment`. Tomcat closes the connection instead if the remaining request body exceeds the
+connector's `maxSwallowSize` (2 MB by default), so raise it if larger uploads should be answered with the redirect.
+
+Mails are sent synchronously and only once, a failure is reported to the user. `MCR.Mail.NumTries=0` disables
+sending mails, other values of `MCR.Mail.NumTries` have no effect because attachments are removed after sending.
+
 ---
 
 ### Configuring a from submission handler for an action

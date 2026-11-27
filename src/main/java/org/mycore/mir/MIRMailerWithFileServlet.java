@@ -85,6 +85,11 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     private static final String ERROR_CAPTCHA = "captcha";
     private static final String ERROR_MAIL = "mail";
+    private static final String ERROR_ATTACHMENT = "attachment";
+
+    private static final String PARAM_ERROR = "error";
+
+    private static final int MAX_REDIRECT_URL_LENGTH = 4000;
 
     private static final Set<String> SENSITIVE_PARAMS = Set.of(PARAM_CAPTCHA, PARAM_ACTION);
 
@@ -93,12 +98,19 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     private static final Set<String> DISALLOWED_MAIL_DOMAINS =
         MCRConfiguration2.getOrThrow(PROPERTY_PREFIX + "DisallowedEmailDomains", MCRConfiguration2::splitValue)
+            .map(domain -> domain.toLowerCase(Locale.ROOT))
             .collect(Collectors.toSet());
 
     @Override
     protected void doGetPost(MCRServletJob job) throws ServletException, IOException {
         LOGGER.debug(() -> "Starting...");
         LOGGER.debug(() -> MIRMailerWithFileServletHelper.buildRequestLogMessage(job.getRequest()));
+        if (MIRMailerWithFileServletHelper.hasMultipartError(job.getRequest())) {
+            LOGGER.warn("Rejected multipart request, it could not be parsed or exceeds the upload size limits");
+            redirectWithError(job.getRequest(), job.getResponse(), FormData.ofRequest(job.getRequest()),
+                ERROR_ATTACHMENT);
+            return;
+        }
         final String action = job.getRequest().getParameter(PARAM_ACTION);
         if (action == null) {
             LOGGER.error(() -> "'action' parameter is required");
@@ -204,8 +216,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     }
 
     private static boolean isDisallowedSender(String email) {
-        final String domain = email.substring(email.lastIndexOf('@') + 1).trim().toLowerCase(Locale.ROOT);
-        return DISALLOWED_MAIL_DOMAINS.stream().anyMatch(d -> domain.equals(d) || domain.endsWith("." + d));
+        return MIRMailerWithFileServletHelper.isDisallowedDomain(email, DISALLOWED_MAIL_DOMAINS);
     }
 
     private boolean validateCaptcha(HttpServletRequest request, HttpServletResponse response, FormData formData)
@@ -225,17 +236,14 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         return Optional.ofNullable(request.getSession().getAttribute(CAPTCHA_SESSION_KEY))
             .filter(String.class::isInstance)
             .map(String.class::cast)
-            .map(stored -> stored.equals(captcha))
+            .map(stored -> stored.equals(captcha.trim()))
             .orElse(false);
     }
 
     private void redirectWithError(HttpServletRequest request, HttpServletResponse response, FormData formData,
         String errorCode) throws IOException {
-        final String referer = getSafeReferer(request);
-        final String separator = referer.contains("?") ? "&" : "?";
-        final String url = referer + separator + "error="
-            + MIRMailerWithFileServletHelper.encodeUriComponent(errorCode)
-            + MIRMailerWithFileServletHelper.getUrlParams(formData.fields);
+        final String url = MIRMailerWithFileServletHelper.buildErrorRedirectUrl(getSafeReferer(request),
+            PARAM_ERROR, errorCode, formData.fields, MAX_REDIRECT_URL_LENGTH);
         response.sendRedirect(url);
     }
 

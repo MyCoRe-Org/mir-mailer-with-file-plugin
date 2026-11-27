@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 import jakarta.mail.internet.AddressException;
@@ -68,6 +69,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
     private final List<String> requiredFieldNames;
     private final AttachmentConfig attachmentConfig;
     private final boolean allowCopy;
+    private final MailTransport mailTransport;
 
     /**
      * Constructs a MIRFormSubmissionMailHandler.
@@ -75,6 +77,12 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
      * @param config the config
      */
     public MIRFormSubmissionMailHandler(FormSubmissionHandlerConfig config) {
+        this(config, skipIfMailDisabled(() -> MCRConfiguration2.getInt("MCR.Mail.NumTries").orElse(1),
+            MIRFormSubmissionMailHandler::sendWithMailer));
+    }
+
+    MIRFormSubmissionMailHandler(FormSubmissionHandlerConfig config, MailTransport mailTransport) {
+        this.mailTransport = mailTransport;
         this.sender = config.sender;
         this.recipients = config.recipients();
         this.subject = config.subject;
@@ -96,9 +104,10 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         final List<Path> tempFiles = new ArrayList<>();
         Path uploadDir = null;
         try {
-            final String body = bodyRenderer.render(formSubmissionRequest);
+            final String body = renderBody(formSubmissionRequest);
             if (!attachments.isEmpty()) {
-                uploadDir = Files.createTempDirectory(Path.of(attachmentConfig.uploadPath()), "mwf-");
+                final Path uploadBase = Files.createDirectories(Path.of(attachmentConfig.uploadPath()));
+                uploadDir = Files.createTempDirectory(uploadBase, "mwf-");
                 for (MIRInboundAttachment attachment : attachments) {
                     tempFiles.add(uploadFile(uploadDir, attachment));
                 }
@@ -109,26 +118,109 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             if (sendCopy && optFormSender.isEmpty()) {
                 throw new MIRFormSubmissionValidationException(ERROR_MAIL, "No sender found, check form");
             }
+            final String mailSubject = stripInvalidXmlChars(subject);
+            final String mailBody = stripInvalidXmlChars(body);
             if (optFormSender.isPresent()) {
-                MCRMailer.send(sender, List.of(optFormSender.get()), recipients, null, subject, body, parts);
+                sendMail(new OutgoingMail(sender, List.of(optFormSender.get()), recipients, mailSubject, mailBody,
+                    parts));
                 if (sendCopy) {
-                    MCRMailer.send(sender, optFormSender.get(), subject, body);
+                    sendCopy(new OutgoingMail(sender, null, List.of(optFormSender.get()), mailSubject, mailBody,
+                        List.of()));
                 }
             } else {
-                MCRMailer.send(sender, recipients, subject, body, false);
+                sendMail(new OutgoingMail(sender, null, recipients, mailSubject, mailBody, parts));
             }
         } catch (IOException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: error handling attachments", e);
-        } catch (MIRFormSubmissionHandlerException e) {
-            throw e;
-        } catch (MCRException e) {
-            throw new MIRFormSubmissionHandlerException("Failed to send mail: " + e.getMessage(), e);
         } finally {
             tempFiles.forEach(MIRFormSubmissionMailHandler::deleteQuietly);
             if (uploadDir != null) {
                 deleteQuietly(uploadDir);
             }
         }
+    }
+
+    private String renderBody(MIRFormSubmissionRequest formSubmissionRequest) {
+        try {
+            return bodyRenderer.render(formSubmissionRequest);
+        } catch (MIRFormSubmissionHandlerException e) {
+            throw e;
+        } catch (MCRException e) {
+            throw new MIRFormSubmissionHandlerException("Failed to render mail body: " + e.getMessage(), e);
+        }
+    }
+
+    private void sendMail(OutgoingMail mail) {
+        try {
+            mailTransport.send(mail);
+        } catch (Exception e) {
+            throw new MIRFormSubmissionHandlerException("Failed to send mail: " + e.getMessage(), e);
+        }
+    }
+
+    private void sendCopy(OutgoingMail mail) {
+        try {
+            mailTransport.send(mail);
+        } catch (Exception e) {
+            LOGGER.warn("Failed to send copy to {}", mail.to(), e);
+        }
+    }
+
+    static String stripInvalidXmlChars(String value) {
+        if (value == null) {
+            return null;
+        }
+        final StringBuilder sb = new StringBuilder(value.length());
+        value.codePoints().filter(MIRFormSubmissionMailHandler::isValidXmlChar).forEach(sb::appendCodePoint);
+        return sb.toString();
+    }
+
+    private static boolean isValidXmlChar(int c) {
+        return c == 0x9 || c == 0xA || c == 0xD || c >= 0x20 && c <= 0xD7FF || c >= 0xE000 && c <= 0xFFFD
+            || c >= 0x10000 && c <= 0x10FFFF;
+    }
+
+    static MailTransport skipIfMailDisabled(IntSupplier numTries, MailTransport transport) {
+        return mail -> {
+            if (numTries.getAsInt() <= 0) {
+                LOGGER.info("Mail is disabled by MCR.Mail.NumTries, not sending mail to {}", mail.to());
+                return;
+            }
+            transport.send(mail);
+        };
+    }
+
+    private static void sendWithMailer(OutgoingMail outgoingMail) throws Exception {
+        final MCRMailer.EMail mail = new MCRMailer.EMail();
+        mail.from = outgoingMail.from();
+        mail.replyTo = outgoingMail.replyTo();
+        mail.to = outgoingMail.to();
+        mail.subject = outgoingMail.subject();
+        mail.msgParts = List.of(new MCRMailer.EMail.MessagePart(outgoingMail.body()));
+        mail.parts = outgoingMail.parts();
+        MCRMailer.send(mail.toXML().getRootElement(), true);
+    }
+
+    /**
+     * A mail to be sent by a {@link MailTransport}.
+     *
+     * @param from the sender
+     * @param replyTo the reply-to addresses, may be null
+     * @param to the recipients
+     * @param subject the subject
+     * @param body the body
+     * @param parts URIs of files to attach
+     */
+    record OutgoingMail(String from, List<String> replyTo, List<String> to, String subject, String body,
+        List<String> parts) {
+    }
+
+    /**
+     * Sends an {@link OutgoingMail} and throws an exception if sending fails.
+     */
+    @FunctionalInterface
+    interface MailTransport {
+        void send(OutgoingMail mail) throws Exception;
     }
 
     private static void deleteQuietly(Path path) {
@@ -205,7 +297,7 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
             address.validate();
             final String senderName = fields.get(FIELD_SENDER_NAME);
             if (senderName != null && !senderName.isBlank()) {
-                address.setPersonal(senderName.trim(), StandardCharsets.UTF_8.name());
+                address.setPersonal(stripInvalidXmlChars(senderName.trim()), StandardCharsets.UTF_8.name());
             }
             return Optional.of(address.toString());
         } catch (AddressException | UnsupportedEncodingException e) {

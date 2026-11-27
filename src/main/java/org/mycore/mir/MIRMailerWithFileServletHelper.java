@@ -20,12 +20,19 @@ package org.mycore.mir;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import java.io.IOException;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
@@ -38,19 +45,104 @@ public final class MIRMailerWithFileServletHelper {
     private MIRMailerWithFileServletHelper() {}
 
     /**
-     * Converts a map of parameters into a URL query string
+     * Builds a redirect URL that reports an error and carries the given form fields as query parameters.
+     * Parameters of a previous attempt are removed from the base URL. Fields are only added as long as the
+     * URL does not exceed the given maximum length.
      *
-     * @param params a map of parameter names and values
-     * @return a URL-encoded query string
+     * @param baseUrl the URL to redirect to
+     * @param errorParam the name of the error parameter
+     * @param errorCode the error code
+     * @param fields a map of field names and values
+     * @param maxLength the maximum length of the resulting URL
+     * @return the redirect URL
      */
-    public static String getUrlParams(Map<String, String> params) {
-        final StringBuilder sb = new StringBuilder();
-        params.forEach((key, value) -> {
+    public static String buildErrorRedirectUrl(String baseUrl, String errorParam, String errorCode,
+        Map<String, String> fields, int maxLength) {
+        final String base = removeQueryParams(baseUrl, errorParam, fields.keySet());
+        final StringBuilder url = new StringBuilder(base).append(base.contains("?") ? '&' : '?')
+            .append(encodeUriComponent(errorParam)).append('=').append(encodeUriComponent(errorCode));
+        fields.forEach((key, value) -> {
             if (value != null) {
-                sb.append('&').append(encodeUriComponent(key)).append('=').append(encodeUriComponent(value));
+                final String param = '&' + encodeUriComponent(key) + '=' + encodeUriComponent(value);
+                if (url.length() + param.length() <= maxLength) {
+                    url.append(param);
+                }
             }
         });
-        return sb.toString();
+        return url.toString();
+    }
+
+    /**
+     * Checks whether the domain of the given mail address is one of the given domains or a subdomain of it.
+     *
+     * @param email the mail address
+     * @param domains the disallowed domains in lower case
+     * @return true if the domain is disallowed
+     */
+    public static boolean isDisallowedDomain(String email, Set<String> domains) {
+        String address;
+        try {
+            address = new InternetAddress(email.trim(), true).getAddress();
+        } catch (AddressException e) {
+            address = email.trim();
+        }
+        String domain = address.substring(address.lastIndexOf('@') + 1).trim().toLowerCase(Locale.ROOT);
+        while (domain.endsWith(".")) {
+            domain = domain.substring(0, domain.length() - 1);
+        }
+        final String normalizedDomain = domain;
+        return domains.stream().anyMatch(d -> normalizedDomain.equals(d) || normalizedDomain.endsWith("." + d));
+    }
+
+    /**
+     * Checks whether the request is a multipart request whose body could not be parsed, for example because it
+     * exceeds the configured upload size limits.
+     *
+     * @param request the HTTP request
+     * @return true if the multipart body could not be parsed
+     */
+    public static boolean hasMultipartError(HttpServletRequest request) {
+        final String contentType = request.getContentType();
+        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("multipart/")) {
+            return false;
+        }
+        try {
+            request.getParts();
+            return false;
+        } catch (IllegalStateException | IOException | ServletException e) {
+            return true;
+        }
+    }
+
+    private static String removeQueryParams(String url, String errorParam, Set<String> names) {
+        final int queryStart = url.indexOf('?');
+        if (queryStart < 0) {
+            return url;
+        }
+        final List<String> kept = new ArrayList<>();
+        for (String param : url.substring(queryStart + 1).split("&")) {
+            if (param.isEmpty()) {
+                continue;
+            }
+            final String name = decodeQueryComponent(param.split("=", 2)[0]);
+            if (errorParam.equals(name)) {
+                break;
+            }
+            if (!names.contains(name)) {
+                kept.add(param);
+            }
+        }
+        final String query = String.join("&", kept);
+        final String path = url.substring(0, queryStart);
+        return query.isEmpty() ? path : path + '?' + query;
+    }
+
+    private static String decodeQueryComponent(String component) {
+        try {
+            return URLDecoder.decode(component, UTF_8);
+        } catch (IllegalArgumentException e) {
+            return component;
+        }
     }
 
     /**
