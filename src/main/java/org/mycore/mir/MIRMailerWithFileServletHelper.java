@@ -100,10 +100,8 @@ public final class MIRMailerWithFileServletHelper {
      *
      * @param request the HTTP request
      * @return true if the multipart body could not be parsed
-     * @throws IOException if reading the request fails
-     * @throws ServletException if the request is not a multipart request
      */
-    public static boolean hasMultipartError(HttpServletRequest request) throws IOException, ServletException {
+    public static boolean hasMultipartError(HttpServletRequest request) {
         final String contentType = request.getContentType();
         if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("multipart/")) {
             return false;
@@ -111,7 +109,7 @@ public final class MIRMailerWithFileServletHelper {
         try {
             request.getParts();
             return false;
-        } catch (IllegalStateException e) {
+        } catch (IllegalStateException | IOException | ServletException e) {
             return true;
         }
     }
@@ -126,7 +124,7 @@ public final class MIRMailerWithFileServletHelper {
             if (param.isEmpty()) {
                 continue;
             }
-            final String name = URLDecoder.decode(param.split("=", 2)[0], UTF_8);
+            final String name = decodeQueryComponent(param.split("=", 2)[0]);
             if (errorParam.equals(name)) {
                 break;
             }
@@ -137,6 +135,14 @@ public final class MIRMailerWithFileServletHelper {
         final String query = String.join("&", kept);
         final String path = url.substring(0, queryStart);
         return query.isEmpty() ? path : path + '?' + query;
+    }
+
+    private static String decodeQueryComponent(String component) {
+        try {
+            return URLDecoder.decode(component, UTF_8);
+        } catch (IllegalArgumentException e) {
+            return component;
+        }
     }
 
     /**

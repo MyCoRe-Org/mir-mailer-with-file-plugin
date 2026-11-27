@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,6 +61,13 @@ class MIRMailerWithFileServletHelperTest {
         final String url = MIRMailerWithFileServletHelper.buildErrorRedirectUrl(
             "https://host/form.xml?lang=de&error=captcha&name=Old&copy=on", "error", "mail", fields, 4000);
         assertEquals("https://host/form.xml?lang=de&error=mail&name=New", url);
+    }
+
+    @Test
+    void buildErrorRedirectUrlKeepsMalformedParameters() {
+        final String url = MIRMailerWithFileServletHelper.buildErrorRedirectUrl(
+            "https://host/form.xml?x%=1&error=captcha", "error", "mail", Map.of(), 4000);
+        assertEquals("https://host/form.xml?x%=1&error=mail", url);
     }
 
     @Test
@@ -118,12 +126,18 @@ class MIRMailerWithFileServletHelperTest {
     }
 
     @Test
+    void hasMultipartErrorDetectsBrokenBody() throws Exception {
+        assertTrue(MIRMailerWithFileServletHelper.hasMultipartError(request("multipart/form-data; boundary=x",
+            new IOException("truncated"))));
+    }
+
+    @Test
     void hasMultipartErrorAcceptsParsedMultipartRequests() throws Exception {
         assertFalse(MIRMailerWithFileServletHelper.hasMultipartError(request("multipart/form-data; boundary=x",
             null)));
     }
 
-    private static HttpServletRequest request(String contentType, RuntimeException partsException) {
+    private static HttpServletRequest request(String contentType, Exception partsException) {
         return (HttpServletRequest) Proxy.newProxyInstance(HttpServletRequest.class.getClassLoader(),
             new Class<?>[] { HttpServletRequest.class }, (proxy, method, args) -> switch (method.getName()) {
                 case "getContentType" -> contentType;
