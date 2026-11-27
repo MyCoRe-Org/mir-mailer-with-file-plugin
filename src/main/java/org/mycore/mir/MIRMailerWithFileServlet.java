@@ -207,8 +207,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     }
 
     private static boolean isDisallowedSender(String email) {
-        final String domain = email.substring(email.lastIndexOf('@') + 1).trim().toLowerCase(Locale.ROOT);
-        return DISALLOWED_MAIL_DOMAINS.stream().anyMatch(d -> domain.equals(d) || domain.endsWith("." + d));
+        return MIRMailerWithFileServletHelper.isDisallowedDomain(email, DISALLOWED_MAIL_DOMAINS);
     }
 
     private boolean validateCaptcha(HttpServletRequest request, HttpServletResponse response, FormData formData)

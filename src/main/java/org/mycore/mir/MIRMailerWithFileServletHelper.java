@@ -68,6 +68,18 @@ public final class MIRMailerWithFileServletHelper {
         return url.toString();
     }
 
+    /**
+     * Checks whether the domain of the given mail address is one of the given domains or a subdomain of it.
+     *
+     * @param email the mail address
+     * @param domains the disallowed domains in lower case
+     * @return true if the domain is disallowed
+     */
+    public static boolean isDisallowedDomain(String email, Set<String> domains) {
+        final String domain = email.substring(email.lastIndexOf('@') + 1).trim().toLowerCase(Locale.ROOT);
+        return domains.stream().anyMatch(d -> domain.equals(d) || domain.endsWith("." + d));
+    }
+
     private static String removeQueryParams(String url, String errorParam, Set<String> names) {
         final int queryStart = url.indexOf('?');
         if (queryStart < 0) {

@@ -17,6 +17,7 @@
   <properties>
     <java.target.version>17</java.target.version>
     <mycore.version>2023.06.4</mycore.version>
+    <junit.version>5.12.2</junit.version>
     <nanocaptcha.version>1.3</nanocaptcha.version>
   </properties>
   <build>
@@ -54,6 +55,14 @@
               <MCR-Auto-Deploy>true</MCR-Auto-Deploy>
             </manifestEntries>
           </archive>
+        </configuration>
+      </plugin>
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <java.awt.headless>true</java.awt.headless>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
     </plugins>
@@ -96,6 +105,12 @@
       <groupId>org.mycore</groupId>
       <artifactId>mycore-base</artifactId>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <profiles>
