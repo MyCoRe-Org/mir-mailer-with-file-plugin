@@ -22,12 +22,4 @@
               xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-fragment_3_0.xsd"
               id="WebFragment_ID" version="3.0">
 
-  <servlet>
-    <servlet-name>MIRMailerWithFileServlet</servlet-name>
-    <servlet-class>org.mycore.mir.MIRMailerWithFileServlet</servlet-class>
-  </servlet>
-  <servlet-mapping>
-    <servlet-name>MIRMailerWithFileServlet</servlet-name>
-    <url-pattern>/servlets/MIRMailerWithFile</url-pattern>
-  </servlet-mapping>
 </web-fragment>

@@ -38,7 +38,6 @@ import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 
 import jakarta.servlet.ServletException;
-import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -62,7 +61,6 @@ import net.logicsquad.nanocaptcha.image.ImageCaptcha;
 /**
  * Servlet implementation class MIRMailerWithFileServlet.
  */
-@MultipartConfig(maxFileSize = 104_857_600L, maxRequestSize = 209_715_200L)
 public class MIRMailerWithFileServlet extends MCRServlet {
 
     @Serial

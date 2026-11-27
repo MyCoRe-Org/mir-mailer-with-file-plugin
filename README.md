@@ -21,6 +21,14 @@ configurable form submission handlers.
 ### Required Properties
 - **`MIR.MailerWithFileServlet.DisallowedEmailDomains`**  
   A list of blocked sender domains.
+
+### Optional Properties
+- **`MIR.MailerWithFileServlet.MaxFileSize`**  
+  Maximum size in bytes of a single uploaded file, `-1` (default) means unlimited.
+- **`MIR.MailerWithFileServlet.MaxRequestSize`**  
+  Maximum size in bytes of a whole request including all files, `-1` (default) means unlimited.
+
+The container rejects requests exceeding these limits before the form is processed.
 ---
 
 ### Configuring a from submission handler for an action
