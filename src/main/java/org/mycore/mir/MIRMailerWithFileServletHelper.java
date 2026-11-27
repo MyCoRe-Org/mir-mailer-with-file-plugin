@@ -20,11 +20,14 @@ package org.mycore.mir;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -38,19 +41,47 @@ public final class MIRMailerWithFileServletHelper {
     private MIRMailerWithFileServletHelper() {}
 
     /**
-     * Converts a map of parameters into a URL query string
+     * Builds a redirect URL that reports an error and carries the given form fields as query parameters.
+     * Parameters of a previous attempt are removed from the base URL. Fields are only added as long as the
+     * URL does not exceed the given maximum length.
      *
-     * @param params a map of parameter names and values
-     * @return a URL-encoded query string
+     * @param baseUrl the URL to redirect to
+     * @param errorParam the name of the error parameter
+     * @param errorCode the error code
+     * @param fields a map of field names and values
+     * @param maxLength the maximum length of the resulting URL
+     * @return the redirect URL
      */
-    public static String getUrlParams(Map<String, String> params) {
-        final StringBuilder sb = new StringBuilder();
-        params.forEach((key, value) -> {
+    public static String buildErrorRedirectUrl(String baseUrl, String errorParam, String errorCode,
+        Map<String, String> fields, int maxLength) {
+        final String base = removeQueryParams(baseUrl, errorParam, fields.keySet());
+        final StringBuilder url = new StringBuilder(base).append(base.contains("?") ? '&' : '?')
+            .append(encodeUriComponent(errorParam)).append('=').append(encodeUriComponent(errorCode));
+        fields.forEach((key, value) -> {
             if (value != null) {
-                sb.append('&').append(encodeUriComponent(key)).append('=').append(encodeUriComponent(value));
+                final String param = '&' + encodeUriComponent(key) + '=' + encodeUriComponent(value);
+                if (url.length() + param.length() <= maxLength) {
+                    url.append(param);
+                }
             }
         });
-        return sb.toString();
+        return url.toString();
+    }
+
+    private static String removeQueryParams(String url, String errorParam, Set<String> names) {
+        final int queryStart = url.indexOf('?');
+        if (queryStart < 0) {
+            return url;
+        }
+        final String query = Arrays.stream(url.substring(queryStart + 1).split("&"))
+            .filter(param -> !param.isEmpty())
+            .filter(param -> {
+                final String name = URLDecoder.decode(param.split("=", 2)[0], UTF_8);
+                return !errorParam.equals(name) && !names.contains(name);
+            })
+            .collect(Collectors.joining("&"));
+        final String path = url.substring(0, queryStart);
+        return query.isEmpty() ? path : path + '?' + query;
     }
 
     /**

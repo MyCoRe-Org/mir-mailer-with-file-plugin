@@ -62,7 +62,7 @@ import net.logicsquad.nanocaptcha.image.ImageCaptcha;
 /**
  * Servlet implementation class MIRMailerWithFileServlet.
  */
-@MultipartConfig
+@MultipartConfig(maxFileSize = 104_857_600L, maxRequestSize = 209_715_200L)
 public class MIRMailerWithFileServlet extends MCRServlet {
 
     @Serial
@@ -86,6 +86,10 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     private static final String ERROR_CAPTCHA = "captcha";
     private static final String ERROR_MAIL = "mail";
 
+    private static final String PARAM_ERROR = "error";
+
+    private static final int MAX_REDIRECT_URL_LENGTH = 4000;
+
     private static final Set<String> SENSITIVE_PARAMS = Set.of(PARAM_CAPTCHA, PARAM_ACTION);
 
     private static final String CHAR_ENCODING =
@@ -93,6 +97,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     private static final Set<String> DISALLOWED_MAIL_DOMAINS =
         MCRConfiguration2.getOrThrow(PROPERTY_PREFIX + "DisallowedEmailDomains", MCRConfiguration2::splitValue)
+            .map(domain -> domain.toLowerCase(Locale.ROOT))
             .collect(Collectors.toSet());
 
     @Override
@@ -225,17 +230,14 @@ public class MIRMailerWithFileServlet extends MCRServlet {
         return Optional.ofNullable(request.getSession().getAttribute(CAPTCHA_SESSION_KEY))
             .filter(String.class::isInstance)
             .map(String.class::cast)
-            .map(stored -> stored.equals(captcha))
+            .map(stored -> stored.equals(captcha.trim()))
             .orElse(false);
     }
 
     private void redirectWithError(HttpServletRequest request, HttpServletResponse response, FormData formData,
         String errorCode) throws IOException {
-        final String referer = getSafeReferer(request);
-        final String separator = referer.contains("?") ? "&" : "?";
-        final String url = referer + separator + "error="
-            + MIRMailerWithFileServletHelper.encodeUriComponent(errorCode)
-            + MIRMailerWithFileServletHelper.getUrlParams(formData.fields);
+        final String url = MIRMailerWithFileServletHelper.buildErrorRedirectUrl(getSafeReferer(request),
+            PARAM_ERROR, errorCode, formData.fields, MAX_REDIRECT_URL_LENGTH);
         response.sendRedirect(url);
     }
 
