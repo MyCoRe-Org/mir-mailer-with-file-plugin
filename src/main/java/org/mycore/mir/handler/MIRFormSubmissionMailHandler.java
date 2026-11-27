@@ -98,7 +98,8 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
         try {
             final String body = bodyRenderer.render(formSubmissionRequest);
             if (!attachments.isEmpty()) {
-                uploadDir = Files.createTempDirectory(Path.of(attachmentConfig.uploadPath()), "mwf-");
+                final Path uploadBase = Files.createDirectories(Path.of(attachmentConfig.uploadPath()));
+                uploadDir = Files.createTempDirectory(uploadBase, "mwf-");
                 for (MIRInboundAttachment attachment : attachments) {
                     tempFiles.add(uploadFile(uploadDir, attachment));
                 }
@@ -110,24 +111,35 @@ public class MIRFormSubmissionMailHandler implements MIRFormSubmissionHandler {
                 throw new MIRFormSubmissionValidationException(ERROR_MAIL, "No sender found, check form");
             }
             if (optFormSender.isPresent()) {
-                MCRMailer.send(sender, List.of(optFormSender.get()), recipients, null, subject, body, parts);
+                sendMail(List.of(optFormSender.get()), recipients, body, parts);
                 if (sendCopy) {
-                    MCRMailer.send(sender, optFormSender.get(), subject, body);
+                    sendMail(null, List.of(optFormSender.get()), body, List.of());
                 }
             } else {
-                MCRMailer.send(sender, recipients, subject, body, false);
+                sendMail(null, recipients, body, parts);
             }
         } catch (IOException e) {
             throw new MIRFormSubmissionHandlerException("Failed to send mail: error handling attachments", e);
-        } catch (MIRFormSubmissionHandlerException e) {
-            throw e;
-        } catch (MCRException e) {
-            throw new MIRFormSubmissionHandlerException("Failed to send mail: " + e.getMessage(), e);
         } finally {
             tempFiles.forEach(MIRFormSubmissionMailHandler::deleteQuietly);
             if (uploadDir != null) {
                 deleteQuietly(uploadDir);
             }
+        }
+    }
+
+    private void sendMail(List<String> replyTo, List<String> to, String body, List<String> parts) {
+        final MCRMailer.EMail mail = new MCRMailer.EMail();
+        mail.from = sender;
+        mail.replyTo = replyTo;
+        mail.to = to;
+        mail.subject = subject;
+        mail.msgParts = List.of(new MCRMailer.EMail.MessagePart(body));
+        mail.parts = parts;
+        try {
+            MCRMailer.send(mail.toXML().getRootElement(), true);
+        } catch (Exception e) {
+            throw new MIRFormSubmissionHandlerException("Failed to send mail: " + e.getMessage(), e);
         }
     }
 
