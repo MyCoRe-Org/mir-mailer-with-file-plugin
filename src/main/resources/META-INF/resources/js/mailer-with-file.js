@@ -19,6 +19,13 @@
 window.addEventListener('load', function () {
   // apply url parameters to form
   const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('error')) {
+    document.querySelectorAll('form input[type="checkbox"], form input[type="radio"]').forEach(input => {
+      if (input.name && !urlParams.has(input.name)) {
+        input.checked = false;
+      }
+    });
+  }
   for (const [key, value] of urlParams) {
     const inputs = document.querySelectorAll(`[name="${CSS.escape(key)}"]`);
     inputs.forEach(input => {

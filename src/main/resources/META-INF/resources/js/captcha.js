@@ -52,8 +52,10 @@ window.addEventListener('load', () => {
       audio.currentTime = 0;
     }
 
-    audio = new Audio(new URL('servlets/MIRMailerWithFile?action=captcha-play&rng=' + Math.random(),
-      window.webApplicationBaseURL).toString());
+    const audioUrl = new URL(captchaImage.getAttribute('src'), document.baseURI);
+    audioUrl.searchParams.set('action', 'captcha-play');
+    audioUrl.searchParams.set('rng', Math.random().toString());
+    audio = new Audio(audioUrl.toString());
 
     audio.play();
     captchaPlay?.classList.add('d-none');
