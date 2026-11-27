@@ -83,6 +83,7 @@ public class MIRMailerWithFileServlet extends MCRServlet {
 
     private static final String ERROR_CAPTCHA = "captcha";
     private static final String ERROR_MAIL = "mail";
+    private static final String ERROR_ATTACHMENT = "attachment";
 
     private static final String PARAM_ERROR = "error";
 
@@ -102,6 +103,12 @@ public class MIRMailerWithFileServlet extends MCRServlet {
     protected void doGetPost(MCRServletJob job) throws ServletException, IOException {
         LOGGER.debug(() -> "Starting...");
         LOGGER.debug(() -> MIRMailerWithFileServletHelper.buildRequestLogMessage(job.getRequest()));
+        if (MIRMailerWithFileServletHelper.hasMultipartError(job.getRequest())) {
+            LOGGER.warn("Rejected multipart request, it could not be parsed or exceeds the upload size limits");
+            redirectWithError(job.getRequest(), job.getResponse(), FormData.ofRequest(job.getRequest()),
+                ERROR_ATTACHMENT);
+            return;
+        }
         final String action = job.getRequest().getParameter(PARAM_ACTION);
         if (action == null) {
             LOGGER.error(() -> "'action' parameter is required");

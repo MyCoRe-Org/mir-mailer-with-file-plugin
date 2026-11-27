@@ -22,9 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +50,15 @@ class MIRMailerWithFileServletHelperTest {
         fields.put("name", "New");
         final String url = MIRMailerWithFileServletHelper.buildErrorRedirectUrl(
             "https://host/form.xml?lang=de&error=captcha&name=Old", "error", "mail", fields, 4000);
+        assertEquals("https://host/form.xml?lang=de&error=mail&name=New", url);
+    }
+
+    @Test
+    void buildErrorRedirectUrlDropsAllFieldsOfPreviousAttempt() {
+        final Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("name", "New");
+        final String url = MIRMailerWithFileServletHelper.buildErrorRedirectUrl(
+            "https://host/form.xml?lang=de&error=captcha&name=Old&copy=on", "error", "mail", fields, 4000);
         assertEquals("https://host/form.xml?lang=de&error=mail&name=New", url);
     }
 
@@ -81,5 +94,46 @@ class MIRMailerWithFileServletHelperTest {
         assertTrue(MIRMailerWithFileServletHelper.isDisallowedDomain("a@Mail.Example.COM ", domains));
         assertFalse(MIRMailerWithFileServletHelper.isDisallowedDomain("a@notexample.com", domains));
         assertFalse(MIRMailerWithFileServletHelper.isDisallowedDomain("a@example.org", domains));
+    }
+
+    @Test
+    void isDisallowedDomainHandlesAddressForms() {
+        final Set<String> domains = Set.of("example.com");
+        assertTrue(MIRMailerWithFileServletHelper.isDisallowedDomain("Spam <x@example.com>", domains));
+        assertTrue(MIRMailerWithFileServletHelper.isDisallowedDomain("x@example.com (comment)", domains));
+        assertTrue(MIRMailerWithFileServletHelper.isDisallowedDomain("x@example.com.", domains));
+    }
+
+    @Test
+    void hasMultipartErrorIgnoresNonMultipartRequests() throws Exception {
+        assertFalse(MIRMailerWithFileServletHelper.hasMultipartError(request("application/x-www-form-urlencoded",
+            null)));
+        assertFalse(MIRMailerWithFileServletHelper.hasMultipartError(request(null, null)));
+    }
+
+    @Test
+    void hasMultipartErrorDetectsFailedParsing() throws Exception {
+        assertTrue(MIRMailerWithFileServletHelper.hasMultipartError(request("multipart/form-data; boundary=x",
+            new IllegalStateException("too large"))));
+    }
+
+    @Test
+    void hasMultipartErrorAcceptsParsedMultipartRequests() throws Exception {
+        assertFalse(MIRMailerWithFileServletHelper.hasMultipartError(request("multipart/form-data; boundary=x",
+            null)));
+    }
+
+    private static HttpServletRequest request(String contentType, RuntimeException partsException) {
+        return (HttpServletRequest) Proxy.newProxyInstance(HttpServletRequest.class.getClassLoader(),
+            new Class<?>[] { HttpServletRequest.class }, (proxy, method, args) -> switch (method.getName()) {
+                case "getContentType" -> contentType;
+                case "getParts" -> {
+                    if (partsException != null) {
+                        throw partsException;
+                    }
+                    yield List.of();
+                }
+                default -> null;
+            });
     }
 }

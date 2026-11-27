@@ -20,15 +20,19 @@ package org.mycore.mir;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import java.io.IOException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
@@ -76,8 +80,40 @@ public final class MIRMailerWithFileServletHelper {
      * @return true if the domain is disallowed
      */
     public static boolean isDisallowedDomain(String email, Set<String> domains) {
-        final String domain = email.substring(email.lastIndexOf('@') + 1).trim().toLowerCase(Locale.ROOT);
-        return domains.stream().anyMatch(d -> domain.equals(d) || domain.endsWith("." + d));
+        String address;
+        try {
+            address = new InternetAddress(email.trim(), true).getAddress();
+        } catch (AddressException e) {
+            address = email.trim();
+        }
+        String domain = address.substring(address.lastIndexOf('@') + 1).trim().toLowerCase(Locale.ROOT);
+        while (domain.endsWith(".")) {
+            domain = domain.substring(0, domain.length() - 1);
+        }
+        final String normalizedDomain = domain;
+        return domains.stream().anyMatch(d -> normalizedDomain.equals(d) || normalizedDomain.endsWith("." + d));
+    }
+
+    /**
+     * Checks whether the request is a multipart request whose body could not be parsed, for example because it
+     * exceeds the configured upload size limits.
+     *
+     * @param request the HTTP request
+     * @return true if the multipart body could not be parsed
+     * @throws IOException if reading the request fails
+     * @throws ServletException if the request is not a multipart request
+     */
+    public static boolean hasMultipartError(HttpServletRequest request) throws IOException, ServletException {
+        final String contentType = request.getContentType();
+        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("multipart/")) {
+            return false;
+        }
+        try {
+            request.getParts();
+            return false;
+        } catch (IllegalStateException e) {
+            return true;
+        }
     }
 
     private static String removeQueryParams(String url, String errorParam, Set<String> names) {
@@ -85,13 +121,20 @@ public final class MIRMailerWithFileServletHelper {
         if (queryStart < 0) {
             return url;
         }
-        final String query = Arrays.stream(url.substring(queryStart + 1).split("&"))
-            .filter(param -> !param.isEmpty())
-            .filter(param -> {
-                final String name = URLDecoder.decode(param.split("=", 2)[0], UTF_8);
-                return !errorParam.equals(name) && !names.contains(name);
-            })
-            .collect(Collectors.joining("&"));
+        final List<String> kept = new ArrayList<>();
+        for (String param : url.substring(queryStart + 1).split("&")) {
+            if (param.isEmpty()) {
+                continue;
+            }
+            final String name = URLDecoder.decode(param.split("=", 2)[0], UTF_8);
+            if (errorParam.equals(name)) {
+                break;
+            }
+            if (!names.contains(name)) {
+                kept.add(param);
+            }
+        }
+        final String query = String.join("&", kept);
         final String path = url.substring(0, queryStart);
         return query.isEmpty() ? path : path + '?' + query;
     }
