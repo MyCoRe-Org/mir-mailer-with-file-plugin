@@ -57,13 +57,34 @@ public class MIRMailerWithFileStartupHandler implements MCRStartupHandler.AutoEx
         if (servletContext == null) {
             return;
         }
-        final long maxFileSize = MCRConfiguration2.getLong(PROPERTY_PREFIX + "MaxFileSize").orElse(-1L);
-        final long maxRequestSize = MCRConfiguration2.getLong(PROPERTY_PREFIX + "MaxRequestSize").orElse(-1L);
         final ServletRegistration.Dynamic registration =
             servletContext.addServlet(SERVLET_NAME, MIRMailerWithFileServlet.class.getName());
+        if (registration == null) {
+            LOGGER.error("Servlet {} is already registered, it needs its own multipart configuration", SERVLET_NAME);
+            return;
+        }
         registration.addMapping(SERVLET_MAPPING);
+        final long maxFileSize = getLimit("MaxFileSize");
+        final long maxRequestSize = getLimit("MaxRequestSize");
         registration.setMultipartConfig(new MultipartConfigElement("", maxFileSize, maxRequestSize, 0));
         LOGGER.info("Registered {} at {} (max file size: {}, max request size: {})", SERVLET_NAME,
             SERVLET_MAPPING, maxFileSize, maxRequestSize);
+    }
+
+    private static long getLimit(String name) {
+        final String property = PROPERTY_PREFIX + name;
+        return parseLimit(property, MCRConfiguration2.getString(property).orElse(null));
+    }
+
+    static long parseLimit(String property, String value) {
+        if (value == null || value.isBlank()) {
+            return -1L;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            LOGGER.error("Invalid value '{}' for {}, the upload size is not limited", value, property);
+            return -1L;
+        }
     }
 }
